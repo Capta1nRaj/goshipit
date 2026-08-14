@@ -45,6 +45,7 @@ jobs:
         if: steps.version.outputs.changed == 'true'
         with:
           node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Publish to npm
         if: steps.version.outputs.changed == 'true'

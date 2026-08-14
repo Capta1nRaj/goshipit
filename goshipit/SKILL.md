@@ -8,7 +8,7 @@ description: >
     "check my codebase", "launch checklist", "ready to go live?",
     "audit before deploy", "is my project ship-ready?", "should I merge to main?",
     "am I missing anything before launch?", "what could break in production?".
-    Runs 196 checks across secrets, security, code quality, tests,
+    Runs 188 checks across secrets, security, code quality, tests,
     build/performance, reliability, accessibility, deploy config, SEO, PWA,
     and legal compliance. Dynamically detects the stack - no hardcoded framework
     lists. Saves prelaunch-report.md with check IDs and code refs.
@@ -28,6 +28,8 @@ allowed-tools:
     - WebSearch
     - WebFetch
     - Agent
+    - mcp__context7__resolve-library-id
+    - mcp__context7__query-docs
 tags:
     - prelaunch
     - security
@@ -52,7 +54,7 @@ tags:
     - goshipit
 metadata:
     author: priyalraj
-    version: 0.1.1
+    version: 0.1.2
     npm: goshipit
     platforms:
         - claude-code
@@ -76,7 +78,7 @@ metadata:
 
 # goshipit
 
-Pre-launch codebase audit. 196 checks. Stack-aware, severity-weighted, saves prelaunch-report.md. No live URL needed.
+Pre-launch codebase audit. 188 checks. Stack-aware, severity-weighted, saves prelaunch-report.md. No live URL needed.
 Install: `npx goshipit` | Repo: https://github.com/Capta1nRaj/goshipit
 
 ## Step 1 - Stack Detection (auto, fully dynamic)
@@ -155,7 +157,7 @@ Options: list all detected workspaces + `All workspaces`. Score = lowest workspa
 - `Secrets & Security` - keys, .env, validation, rate limiting, CVEs, CORS, cookies, CSP, HSTS
 - `Code Quality & Tests` - debug logs, TODOs, dead code, unused deps, tests, coverage, E2E
 - `Build & Performance` - bundle, types, N+1, render-blocking, images, cache, compression, SW
-- `Reliability, Hygiene & Deploy` - errors, logging, migrations, .gitignore, README, Nginx, Docker, Vercel, SEO, legal
+- `Reliability, Hygiene, Deploy & SEO` - errors, logging, migrations, .gitignore, README, Nginx, Docker, Vercel, SEO, legal
 
 **Q2** `multiSelect: false` · header: `Accessibility` · question: `Include accessibility checks?`
 
@@ -177,18 +179,18 @@ If `DESIGN.md` already exists at project root → skip Q4 entirely, skip Step 11
 
 **Mapping:**
 
-- Q1 `All areas` → cats 1–10 + 14 (+ 11/12/13 auto when detected)
-- `Secrets & Security` → cats 1, 3
-- `Code Quality & Tests` → cats 2, 4
-- `Build & Performance` → cat 5
-- `Reliability, Hygiene & Deploy` → cats 6, 7, 9, 10, 14
+- Q1 `All areas` → cats A–N (+ K/L/M auto when detected)
+- `Secrets & Security` → A, C
+- `Code Quality & Tests` → B, D
+- `Build & Performance` → E
+- `Reliability, Hygiene, Deploy & SEO` → F, G, I, J, N
 - All 4 specific selected → same as `All areas`
-- Cat 11 (PWA) **auto-runs** if `manifest.json`, `sw.js`, `next-pwa`, or workbox detected
-- Cat 12 (E-commerce) **auto-runs** if payment lib, cart routes, product schema, or checkout detected
-- Cat 13 (Billing) **auto-runs** if any payment/billing SDK in deps or source
-- Cat 14 (Legal) **always runs**
+- Cat K (PWA) **auto-runs** if `manifest.json`, `sw.js`, `next-pwa`, or workbox detected
+- Cat L (E-commerce) **auto-runs** if payment lib, cart routes, product schema, or checkout detected
+- Cat M (Billing) **auto-runs** if any payment/billing SDK in deps or source
+- Cat N (Legal) **always runs**
 - Step 9 **always runs** - Step 10 (build) is optional, user is asked before running
-- Q2 `Yes` → also cat 8
+- Q2 `Yes` → also cat H
 - Q3 `Audit + auto-fix` → Step 7 triage can auto-apply safe fixes (Step 8 reference)
 - `Other` typed → treat as custom check
 
@@ -244,25 +246,25 @@ Do NOT read reference files for other categories.
 ```
 
 **How to fill `{REFERENCE_FILE_PATH}` when dispatching:**
-Look up the category in the reference directory table below. Resolve the path relative to this SKILL.md's location (typically `~/.claude/skills/goshipit/references/<filename>`). Pass the absolute path - the sub-agent will Read it to get its checks.
+Look up the category in the reference directory table below. Determine the absolute path by taking the directory that contains this SKILL.md file and appending `references/<filename>`. Do NOT hardcode `~/.claude/skills/goshipit/` - derive it from SKILL.md's actual location at runtime. Pass the resolved absolute path - the sub-agent will Read it to get its checks.
 
 ### Dispatch rules
 
 Single message, all agents simultaneously:
 
-| Selected area                   | Agents for categories                                          |
-| ------------------------------- | -------------------------------------------------------------- |
-| `All areas`                     | 1, 2, 3, 4, 5, 6, 7, 8 (if Q2=Yes), 9, 10, 14 + auto: 11/12/13 |
-| `Secrets & Security`            | 1, 3                                                           |
-| `Code Quality & Tests`          | 2, 4                                                           |
-| `Build & Performance`           | 5                                                              |
-| `Reliability, Hygiene & Deploy` | 6, 7, 9, 10, 14                                                |
-| Accessibility (Q2=Yes)          | 8                                                              |
-| PWA auto                        | 11                                                             |
-| E-commerce auto                 | 12                                                             |
-| Billing auto                    | 13                                                             |
+| Selected area                        | Agents for categories                                     |
+| ------------------------------------ | --------------------------------------------------------- |
+| `All areas`                          | A, B, C, D, E, F, G, H (if Q2=Yes), I, J, N + auto: K/L/M |
+| `Secrets & Security`                 | A, C                                                      |
+| `Code Quality & Tests`               | B, D                                                      |
+| `Build & Performance`                | E                                                         |
+| `Reliability, Hygiene, Deploy & SEO` | F, G, I, J, N                                             |
+| Accessibility (Q2=Yes)               | H                                                         |
+| PWA auto                             | K                                                         |
+| E-commerce auto                      | L                                                         |
+| Billing auto                         | M                                                         |
 
-Cat 14 + Steps 9+10 always spawn. Agent error → mark all its checks `SKIP (agent error - re-run manually)` with no score impact, continue aggregation.
+Cat N + Steps 9+10 always spawn. Agent error → mark all its checks `SKIP (agent error - re-run manually)` with no score impact, continue aggregation.
 
 ---
 
@@ -270,7 +272,7 @@ Cat 14 + Steps 9+10 always spawn. Agent error → mark all its checks `SKIP (age
 
 Check definitions live in `references/` alongside this SKILL.md - one file per category. Sub-agents read only their assigned file. The checks themselves are identical to before; they're just no longer embedded in this file.
 
-**Resolve path:** `{SKILL_DIR}/references/{filename}` where SKILL_DIR is the directory containing this SKILL.md (typically `~/.claude/skills/goshipit/`).
+**Resolve path:** `{SKILL_DIR}/references/{filename}` where SKILL_DIR is the directory containing this SKILL.md. Derive SKILL_DIR at runtime - do NOT hardcode.
 
 | Cat | #   | Name                   | Reference file              | Auto-runs when                                      |
 | --- | --- | ---------------------- | --------------------------- | --------------------------------------------------- |
@@ -348,7 +350,7 @@ Negative score:
 | 0      | 🚨    | DO NOT LAUNCH                  |
 | < 0    | ☠️    | Severely broken - major rework |
 
-Fill bar: `█` = 3.125 pts. 32 blocks. Empty = `░`. Negative = all 32 empty.
+Fill bar: `█` = 3.125 pts. 32 blocks. Empty = `░`. Score ≤ 0 → all 32 empty, show actual negative number and percentage (e.g. `-5 / 100  -5%`).
 
 ---
 
