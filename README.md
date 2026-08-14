@@ -2,7 +2,7 @@
 
 > Pre-launch codebase audit skill for [Claude Code](https://claude.ai/code)
 
-Runs **170+ checks** across 14 categories before you go live. Stack-aware, severity-weighted scoring, two report outputs, and auto-fix suggestions.
+Runs **170+ checks** across 14 categories before you go live. Stack-aware, severity-weighted scoring, interactive triage, and auto-fix suggestions.
 
 ## Install
 
@@ -72,7 +72,6 @@ deploy readiness
 ## Output
 
 - `prelaunch-report.md` — dev report with check IDs, severity, code refs, and fix steps
-- `prelaunch-report-client.md` — plain-English PM/client version
 
 ## Key features
 
