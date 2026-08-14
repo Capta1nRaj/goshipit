@@ -25,13 +25,12 @@ jobs:
         run: |
           PREV=$(git show HEAD~1:package.json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version" 2>/dev/null || echo "0.0.0")
           CURR=$(node -p "require('./package.json').version")
-          echo "prev=$PREV" >> $GITHUB_OUTPUT
           echo "curr=$CURR" >> $GITHUB_OUTPUT
-          if [ "$PREV" != "$CURR" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
+          if [ "$PREV" = "$CURR" ]; then
+            echo "No version change ($CURR). Skipping release."
+            exit 0
           fi
+          echo "changed=true" >> $GITHUB_OUTPUT
 
       - name: Tag version
         if: steps.version.outputs.changed == 'true'
@@ -45,12 +44,7 @@ jobs:
         if: steps.version.outputs.changed == 'true'
         with:
           node-version: '20'
-
-      - name: Publish to npm
-        if: steps.version.outputs.changed == 'true'
-        run: npm publish --access public --provenance
-        env:
-          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Create GitHub Release
         if: steps.version.outputs.changed == 'true'
@@ -58,3 +52,9 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.curr }}
           generate_release_notes: true
+
+      - name: Publish to npm
+        if: steps.version.outputs.changed == 'true'
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

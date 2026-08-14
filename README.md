@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Node.js](https://img.shields.io/node/v/goshipit)](https://nodejs.org)
 
-**Pre-launch codebase audit for [Claude Code](https://claude.ai/code).** 196 checks across 14 categories - secrets, security, tests, SEO, billing, legal, and more. No live URL needed.
+**Pre-launch codebase audit for [Claude Code](https://claude.ai/code).** 188 checks across 14 categories - secrets, security, tests, SEO, billing, legal, and more. No live URL needed.
 
 > [!CAUTION]
 > 🍔 **Token hungry.** goshipit runs 196 parallel checks and writes a full dev report. It will eat tokens. A lot of them.
@@ -37,7 +37,7 @@ or just say: `is my app ready?` · `can I deploy now?` · `prelaunch check`
 | F   | Reliability            | 21     | Runtime pinning, error boundaries, monitoring, DB migrations, connection pooling, backups, email delivery, lockfile conflicts, listener leaks |
 | G   | Hygiene                | 14     | Merge conflicts, large files, `.gitignore`, README gaps, linter errors, placeholder text, mobile responsiveness, CI config secrets            |
 | H   | Accessibility          | 9      | Alt text, ARIA roles, form labels, contrast, focus-visible, keyboard traps, touch targets (WCAG 2.2 AA)                                       |
-| I   | Deploy Config          | 11     | Docker multi-stage + non-root, Vercel, Render/Fly, Nginx, PM2, custom domain, Kubernetes resource limits and probes                           |
+| I   | Deploy Config          | 15     | Docker multi-stage + non-root, Vercel, Render/Fly, Nginx, PM2, custom domain, Kubernetes resource limits and probes                           |
 | J   | SEO & Meta             | 14     | Favicon, robots.txt, sitemap, OG tags, canonical URLs, JSON-LD, analytics, Google Consent Mode v2, llms.txt                                   |
 | K   | PWA & Service Worker   | 5      | Manifest, SW registration, offline fallback, cache busting _(auto-detected)_                                                                  |
 | L   | E-commerce Tracking    | 13     | GA4 + Meta Pixel events, purchase deduplication, server-side CAPI fallback _(auto-detected)_                                                  |
@@ -64,7 +64,8 @@ Score starts at 100 and deducts per violation. Can go negative.
 | 75–89  | 🟡 Minor fixes needed  |
 | 50–74  | 🟠 Several gaps        |
 | 1–49   | 🔴 Not ready           |
-| ≤ 0    | 🚨 Critical violations |
+| 0      | 🚨 DO NOT LAUNCH       |
+| < 0    | ☠️ Severely broken     |
 
 Outputs `prelaunch-report.md` with every finding, file references, and fix steps. Safe auto-fixes (headers, config flags, `.gitignore` entries) are offered with diff preview before applying.
 
