@@ -1,0 +1,34 @@
+{
+  "name": "goshipit",
+  "version": "0.0.2",
+  "description": "Pre-launch codebase audit skill for Claude Code — 170+ checks, stack-agnostic, no live URL needed.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "skill",
+    "prelaunch",
+    "audit",
+    "production",
+    "deploy",
+    "checklist"
+  ],
+  "homepage": "https://github.com/Capta1nRaj/goshipit",
+  "bugs": {
+    "url": "https://github.com/Capta1nRaj/goshipit/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Capta1nRaj/goshipit.git"
+  },
+  "license": "Apache-2.0",
+  "bin": {
+    "goshipit": "./bin/install.js"
+  },
+  "files": [
+    "bin/",
+    "goshipit/SKILL.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
