@@ -2,10 +2,10 @@
 
 Thanks to everyone who has contributed to goshipit.
 
-| GitHub | Role |
-|--------|------|
+| GitHub                                       | Role                 |
+| -------------------------------------------- | -------------------- |
 | [@Capta1nRaj](https://github.com/Capta1nRaj) | Creator & maintainer |
-| [@Sh1v4nk](https://github.com/Sh1v4nk) | Contributor |
+| [@Sh1v4nk](https://github.com/Sh1v4nk)       | Contributor          |
 
 ---
 

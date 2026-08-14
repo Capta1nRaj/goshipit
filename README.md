@@ -1,95 +1,84 @@
 # goshipit
 
-> Pre-launch codebase audit skill for [Claude Code](https://claude.ai/code)
+[![npm version](https://img.shields.io/npm/v/goshipit)](https://www.npmjs.com/package/goshipit)
+[![npm downloads](https://img.shields.io/npm/dm/goshipit)](https://www.npmjs.com/package/goshipit)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Node.js](https://img.shields.io/node/v/goshipit)](https://nodejs.org)
 
-Runs **185 checks** across 14 categories before you go live. Stack-aware, severity-weighted scoring, interactive triage, and auto-fix suggestions.
-
-## Install
+**Pre-launch codebase audit for [Claude Code](https://claude.ai/code).** 196 checks across 14 categories — secrets, security, tests, SEO, billing, legal, and more. No live URL needed.
 
 ```bash
 npx goshipit
 ```
 
-Updates automatically — always pulls the latest SKILL.md:
-
-```bash
-npx goshipit@latest
-```
-
-Installs to `~/.claude/skills/goshipit/SKILL.md`.
-
-## Usage
-
-In Claude Code, say any of:
+Then in Claude Code:
 
 ```
-goshipit
-prelaunch check
-check my codebase
-is the code ready
-ready to deploy
-pre-prod check
-code ready for prod
-launch audit
-deploy readiness
+/goshipit
 ```
+
+or just say: `is my app ready?` · `can I deploy now?` · `prelaunch check`
+
+---
 
 ## What it checks
 
-| # | Category | Checks | Areas covered |
-|---|----------|--------|---------------|
-| A | Secrets & Environment | 9 | Hardcoded secrets, .env in git, multi-env drift, webhook URLs, test-mode payments |
-| B | Code Quality | 16 | Debug logs, TODOs, dead code, complexity, memory leaks, unhandled promises, hallucinated packages |
-| C | Security | 31 | SQLi, XSS, CORS, CSP, HSTS, rate limiting, CSRF, CVEs, BOLA/IDOR, mass assignment, edge runtime awareness |
-| D | Tests | 4 | Test suite, coverage, skipped tests, E2E |
-| E | Build & Performance | 15 | Build errors, TypeScript, bundle size, N+1 queries, images, compression, cache headers, hydration |
-| F | Reliability | 19 | Runtime pinning, error boundaries, error monitoring, DB migrations, pooling, backups, email delivery |
-| G | Hygiene | 13 | Merge conflicts, large files, .gitignore, README, linter, placeholder text, mobile responsiveness |
-| H | Accessibility | 9 | Alt text, ARIA, form labels, contrast, focus visible, keyboard traps, touch targets (WCAG 2.2 AA) |
-| I | Deploy Config | 9 | Docker (multi-stage, non-root), Vercel, Render/Fly, Nginx, PM2, custom domain |
-| J | SEO & Meta | 14 | Favicon, robots.txt, sitemap, OG tags, canonical, JSON-LD, analytics, Google Consent Mode v2, llms.txt |
-| K | PWA & Service Worker | 5 | Manifest, SW registration, offline fallback, cache busting *(auto-detected)* |
-| L | E-commerce Tracking | 13 | GA4 + Meta Pixel events, purchase dedup, CAPI fallback *(auto-detected)* |
-| M | Billing & Subscription | 9 | Webhook events, signature verification, idempotency, dunning, plan limits *(auto-detected)* |
-| N | Legal & Compliance | 7 | Privacy policy, terms, cookie consent, refund policy, GDPR data export/deletion |
+| #   | Category               | Checks | Coverage                                                                                                                                      |
+| --- | ---------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| A   | Secrets & Environment  | 9      | Hardcoded secrets, `.env` in git, multi-env drift, webhook URLs, test-mode payment keys                                                       |
+| B   | Code Quality           | 18     | Debug logs, TODOs, dead code, complexity, memory leaks, unhandled promises, hallucinated packages, TS strict mode, env var access             |
+| C   | Security               | 35     | SQLi, XSS, CORS, CSP, HSTS, rate limiting, CSRF, CVEs, BOLA/IDOR, mass assignment, SSRF, path traversal, eval injection, upload MIME          |
+| D   | Tests                  | 4      | Test suite pass/fail, coverage gaps, skipped tests, missing E2E                                                                               |
+| E   | Build & Performance    | 15     | Build errors, TypeScript errors, bundle size, N+1 queries, image optimization, compression, cache headers, SSR hydration                      |
+| F   | Reliability            | 21     | Runtime pinning, error boundaries, monitoring, DB migrations, connection pooling, backups, email delivery, lockfile conflicts, listener leaks |
+| G   | Hygiene                | 14     | Merge conflicts, large files, `.gitignore`, README gaps, linter errors, placeholder text, mobile responsiveness, CI config secrets            |
+| H   | Accessibility          | 9      | Alt text, ARIA roles, form labels, contrast, focus-visible, keyboard traps, touch targets (WCAG 2.2 AA)                                       |
+| I   | Deploy Config          | 11     | Docker multi-stage + non-root, Vercel, Render/Fly, Nginx, PM2, custom domain, Kubernetes resource limits and probes                           |
+| J   | SEO & Meta             | 14     | Favicon, robots.txt, sitemap, OG tags, canonical URLs, JSON-LD, analytics, Google Consent Mode v2, llms.txt                                   |
+| K   | PWA & Service Worker   | 5      | Manifest, SW registration, offline fallback, cache busting _(auto-detected)_                                                                  |
+| L   | E-commerce Tracking    | 13     | GA4 + Meta Pixel events, purchase deduplication, server-side CAPI fallback _(auto-detected)_                                                  |
+| M   | Billing & Subscription | 9      | Webhook events, signature verification, idempotency, dunning, plan enforcement _(auto-detected)_                                              |
+| N   | Legal & Compliance     | 7      | Privacy policy, terms, cookie consent, refund policy, GDPR data export/deletion                                                               |
+
+Runs all 14 categories in parallel. Stack-aware — detects your framework, runtime, DB, and tooling dynamically. Categories K, L, M only trigger when relevant files are found.
+
+---
 
 ## Scoring
 
-- **P0** (critical): -10 pts each
-- **P1** (high): -3 pts each
-- **P2** (medium): -1 pt each
-- No floor — score can go negative on severe violations
+Score starts at 100 and deducts per violation. Can go negative.
 
-| Score | Grade |
-|---|---|
-| 90–100 | 🟢 Ship it |
-| 75–89 | 🟡 Minor fixes |
-| 50–74 | 🟠 Several gaps |
-| 1–49 | 🔴 Not ready |
-| 0 | 🚨 Stop |
-| < 0 | ☠️ Critical violations |
+| Severity      | Deduction |
+| ------------- | --------- |
+| P0 — critical | −10       |
+| P1 — high     | −3        |
+| P2 — medium   | −1        |
 
-## Output
+| Score  | Result                 |
+| ------ | ---------------------- |
+| 90–100 | 🟢 Ship it             |
+| 75–89  | 🟡 Minor fixes needed  |
+| 50–74  | 🟠 Several gaps        |
+| 1–49   | 🔴 Not ready           |
+| ≤ 0    | 🚨 Critical violations |
 
-- `prelaunch-report.md` — dev report with check IDs, severity, code refs, and fix steps
+Outputs `prelaunch-report.md` with every finding, file references, and fix steps. Safe auto-fixes (headers, config flags, `.gitignore` entries) are offered with diff preview before applying.
 
-## Key features
+---
 
-- **Fully dynamic stack detection** — reads your project files, infers framework/runtime/DB/tooling. No hardcoded lists.
-- **Parallel sub-agents** — each audit category runs simultaneously for fast results
-- **Stack Intelligence Resolution** — MCP-first → WebSearch → built-in knowledge, builds a Stack Profile before running checks
-- **DESIGN.md generation** — generates a Google/Stitch-spec design system file from your codebase tokens
-- **Interactive category picker** — choose which checks to run
-- **Auto-fix** — safe, no-logic-change fixes with diff preview before applying
-- **No live URL needed** — codebase-only audit
+## Requirements
+
+- [Claude Code](https://claude.ai/code)
+- Node.js ≥ 18
+
+---
 
 ## Contributing
 
-Found a bug or want a new check? Two ways to help:
+Open an [issue](https://github.com/Capta1nRaj/goshipit/issues) or PR. To add a check: pick the right file in `goshipit/references/`, add a table row, and update the count in `SKILL.md`, `README.md`, and `package.json`. Tag [@Capta1nCodes](https://x.com/Capta1nCodes) on X with feedback.
 
-- **GitHub Issues** — [open an issue](https://github.com/Capta1nRaj/goshipit/issues) for feature requests or bug reports
-- **X / Twitter** — tag [@Capta1nCodes](https://x.com/Capta1nCodes) with suggestions or feedback
+---
 
 ## License
 
-Apache-2.0
+[Apache-2.0](LICENSE) © [Capta1nRaj](https://github.com/Capta1nRaj)
