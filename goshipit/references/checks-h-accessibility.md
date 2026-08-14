@@ -1,8 +1,8 @@
-# Category H — Accessibility (WCAG 2.2 AA, static grep)
+# Category H - Accessibility (WCAG 2.2 AA, static grep)
 
 | ID  | Check                                                                                                                                         | P   |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| H1  | `<img` without `alt=` — flag with file:line                                                                                                   | P1  |
+| H1  | `<img` without `alt=` - flag with file:line                                                                                                   | P1  |
 | H2  | `<div`/`<span`/`<a` without `href` + click handler but missing `role` + `tabIndex`                                                            | P1  |
 | H3  | `<input>`/`<select>`/`<textarea>` without `<label>`, `aria-label`, or `aria-labelledby`                                                       | P1  |
 | H4  | Hardcoded low-contrast color combos in CSS (white-on-yellow, light-grey-on-white, light-blue-on-white)                                        | P2  |
