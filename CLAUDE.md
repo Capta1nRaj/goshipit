@@ -1,4 +1,4 @@
-# goshipit — Project Instructions
+# goshipit - Project Instructions
 
 ## Sync Rule (enforce after every change)
 
@@ -27,5 +27,5 @@ grep -c "^  - [A-Z][0-9]\+:" goshipit/SKILL.md
 
 ## package.json description format
 ```
-Pre-launch codebase audit skill for Claude Code — NNN checks, stack-agnostic, no live URL needed.
+Pre-launch codebase audit skill for Claude Code - NNN checks, stack-agnostic, no live URL needed.
 ```

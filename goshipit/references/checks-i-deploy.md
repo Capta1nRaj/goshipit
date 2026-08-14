@@ -1,4 +1,4 @@
-# Category I — Deploy Config
+# Category I - Deploy Config
 
 | ID  | Check                                                                                                                                                                                                                                                | P   |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
@@ -6,7 +6,7 @@
 | I1b | _(if Dockerfile)_ No `USER` instruction or `USER root` → container escape = host root                                                                                                                                                                | P0  |
 | I1c | _(if Dockerfile)_ `COPY . .` before `COPY package.json`+lockfile → dep install cache invalidated on every code change                                                                                                                                | P1  |
 | I1d | _(if Dockerfile)_ `CMD` points to raw source (`node src/index.js`) not compiled output                                                                                                                                                               | P1  |
-| I1e | _(if Dockerfile)_ No `.dockerignore` or missing `node_modules`, `.env*`, `.git`, `dist` — wrong-arch binaries or secrets in image                                                                                                                    | P1  |
+| I1e | _(if Dockerfile)_ No `.dockerignore` or missing `node_modules`, `.env*`, `.git`, `dist` - wrong-arch binaries or secrets in image                                                                                                                    | P1  |
 | I2  | _(if `vercel.json`)_ Hardcoded env vars; unreasonable `functions` timeout; dev routes exposed                                                                                                                                                        | P1  |
 | I3  | _(if `render.yaml`/`railway.json`/`fly.toml`)_ Prod env not set; no health check path; dev command in prod                                                                                                                                           | P1  |
 | I4  | No deploy config file found (`Dockerfile`, `vercel.json`, `render.yaml`, `fly.toml`) → undocumented deploy                                                                                                                                           | P2  |

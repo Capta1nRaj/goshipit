@@ -1,4 +1,4 @@
-# Category L — E-commerce Tracking _(only if e-commerce detected)_
+# Category L - E-commerce Tracking _(only if e-commerce detected)_
 
 Only run this category if payment lib, cart routes, product schema, or checkout is detected.
 
@@ -7,7 +7,7 @@ Only run this category if payment lib, cart routes, product schema, or checkout 
 | ID  | Check                                                                                                                                             | P   |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
 | L1  | `gtag('event', 'view_item'` or `dataLayer.push({ event: 'view_item'` missing on product pages                                                     | P1  |
-| L2  | `gtag('event', 'add_to_cart'` missing in cart-add handler (not page load — double-counts on refresh)                                              | P1  |
+| L2  | `gtag('event', 'add_to_cart'` missing in cart-add handler (not page load - double-counts on refresh)                                              | P1  |
 | L3  | `gtag('event', 'begin_checkout'` missing on checkout entry                                                                                        | P1  |
 | L4  | `gtag('event', 'purchase'` missing on order confirmation; `transaction_id` param absent or hardcoded (duplicate ID → inflated revenue on refresh) | P0  |
 | L5  | Any of `view_item`/`add_to_cart`/`begin_checkout`/`purchase` missing `items: [` param → product reports empty                                     | P1  |
@@ -28,4 +28,4 @@ Only run this category if payment lib, cart routes, product schema, or checkout 
 | ID  | Check                                                                                                                                      | P   |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------ | --- |
 | L12 | Thank-you page fires `purchase`/`Purchase` unconditionally on load without dedup (session flag, one-time token, or server-side sent check) | P1  |
-| L13 | No Meta CAPI (`/events` endpoint) or GA4 Measurement Protocol fallback — ad blockers suppress 30–60% of client-side events                 | P1  |
+| L13 | No Meta CAPI (`/events` endpoint) or GA4 Measurement Protocol fallback - ad blockers suppress 30–60% of client-side events                 | P1  |

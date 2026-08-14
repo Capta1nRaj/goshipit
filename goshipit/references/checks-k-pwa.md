@@ -1,4 +1,4 @@
-# Category K — PWA & Service Worker _(only if intent detected)_
+# Category K - PWA & Service Worker _(only if intent detected)_
 
 Only run this category if `manifest.json`, `sw.js`, `next-pwa`, or workbox is detected.
 

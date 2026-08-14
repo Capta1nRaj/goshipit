@@ -1,0 +1,17 @@
+# Dev/CI
+.github/
+assets/
+references/
+CLAUDE.md
+CONTRIBUTORS.md
+
+# Env & logs
+.env
+.env.*
+*.log
+npm-debug.log*
+
+# Misc
+.DS_Store
+node_modules/
+dist/

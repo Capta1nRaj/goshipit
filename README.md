@@ -5,7 +5,11 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Node.js](https://img.shields.io/node/v/goshipit)](https://nodejs.org)
 
-**Pre-launch codebase audit for [Claude Code](https://claude.ai/code).** 196 checks across 14 categories — secrets, security, tests, SEO, billing, legal, and more. No live URL needed.
+**Pre-launch codebase audit for [Claude Code](https://claude.ai/code).** 196 checks across 14 categories - secrets, security, tests, SEO, billing, legal, and more. No live URL needed.
+
+> [!CAUTION]
+> 🍔 **Token hungry.** goshipit runs 196 parallel checks and writes a full dev report. It will eat tokens. A lot of them.
+> Use the **category picker** to stay lean - or just feed the beast and ship.
 
 ```bash
 npx goshipit
@@ -40,7 +44,7 @@ or just say: `is my app ready?` · `can I deploy now?` · `prelaunch check`
 | M   | Billing & Subscription | 9      | Webhook events, signature verification, idempotency, dunning, plan enforcement _(auto-detected)_                                              |
 | N   | Legal & Compliance     | 7      | Privacy policy, terms, cookie consent, refund policy, GDPR data export/deletion                                                               |
 
-Runs all 14 categories in parallel. Stack-aware — detects your framework, runtime, DB, and tooling dynamically. Categories K, L, M only trigger when relevant files are found.
+Runs all 14 categories in parallel. Stack-aware - detects your framework, runtime, DB, and tooling dynamically. Categories K, L, M only trigger when relevant files are found.
 
 ---
 
@@ -50,9 +54,9 @@ Score starts at 100 and deducts per violation. Can go negative.
 
 | Severity      | Deduction |
 | ------------- | --------- |
-| P0 — critical | −10       |
-| P1 — high     | −3        |
-| P2 — medium   | −1        |
+| P0 - critical | −10       |
+| P1 - high     | −3        |
+| P2 - medium   | −1        |
 
 | Score  | Result                 |
 | ------ | ---------------------- |

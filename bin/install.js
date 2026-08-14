@@ -32,7 +32,7 @@ console.log(`
 
 Location: ${skillDir}
 
-Usage in Claude Code — say any of:
+Usage in Claude Code - say any of:
   goshipit
   is my app ready?
   can I deploy now?
