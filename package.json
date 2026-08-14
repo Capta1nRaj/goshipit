@@ -1,7 +1,7 @@
 {
   "name": "goshipit",
   "version": "0.0.3",
-  "description": "Pre-launch codebase audit skill for Claude Code — 170+ checks, stack-agnostic, no live URL needed.",
+  "description": "Pre-launch codebase audit skill for Claude Code — 185 checks, stack-agnostic, no live URL needed.",
   "keywords": [
     "claude",
     "claude-code",

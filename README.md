@@ -2,7 +2,7 @@
 
 > Pre-launch codebase audit skill for [Claude Code](https://claude.ai/code)
 
-Runs **170+ checks** across 14 categories before you go live. Stack-aware, severity-weighted scoring, interactive triage, and auto-fix suggestions.
+Runs **185 checks** across 14 categories before you go live. Stack-aware, severity-weighted scoring, interactive triage, and auto-fix suggestions.
 
 ## Install
 
@@ -36,22 +36,22 @@ deploy readiness
 
 ## What it checks
 
-| # | Category | Checks |
-|---|----------|--------|
-| A | Secrets & Environment | Hardcoded secrets, .env in git, multi-env drift, test-mode payments |
-| B | Code Quality | Debug logs, TODOs, dead code, complexity, memory leaks |
-| C | Security | SQLi, XSS, CORS, CSP, HSTS, rate limiting, CSRF, CVEs |
-| D | Tests | Test suite, coverage, skipped tests, E2E |
-| E | Build & Performance | Build errors, TypeScript, bundle size, images, compression, cache headers |
-| F | Reliability | Runtime pinning, error boundaries, logging, DB migrations, DB pooling, backups |
-| G | Hygiene | Merge conflicts, large files, .gitignore, README, linter, placeholder text |
-| H | Accessibility | Alt text, ARIA, form labels, contrast, page title |
-| I | Deploy Config | Docker (multi-stage, non-root), Vercel, Render/Fly, Nginx, PM2, custom domain |
-| J | SEO & Meta | Favicon, robots.txt, sitemap, OG tags, canonical, JSON-LD, analytics |
-| K | PWA & Service Worker | Manifest, install prompt, offline fallback (auto-detected) |
-| L | E-commerce | Cart, checkout, inventory, payment flow (auto-detected) |
-| M | Billing | Stripe/webhook events, subscription lifecycle (auto-detected) |
-| N | Legal & Compliance | Privacy policy, terms, cookie consent, refund policy |
+| # | Category | Checks | Areas covered |
+|---|----------|--------|---------------|
+| A | Secrets & Environment | 9 | Hardcoded secrets, .env in git, multi-env drift, webhook URLs, test-mode payments |
+| B | Code Quality | 16 | Debug logs, TODOs, dead code, complexity, memory leaks, unhandled promises, hallucinated packages |
+| C | Security | 31 | SQLi, XSS, CORS, CSP, HSTS, rate limiting, CSRF, CVEs, BOLA/IDOR, mass assignment, edge runtime awareness |
+| D | Tests | 4 | Test suite, coverage, skipped tests, E2E |
+| E | Build & Performance | 15 | Build errors, TypeScript, bundle size, N+1 queries, images, compression, cache headers, hydration |
+| F | Reliability | 19 | Runtime pinning, error boundaries, error monitoring, DB migrations, pooling, backups, email delivery |
+| G | Hygiene | 13 | Merge conflicts, large files, .gitignore, README, linter, placeholder text, mobile responsiveness |
+| H | Accessibility | 9 | Alt text, ARIA, form labels, contrast, focus visible, keyboard traps, touch targets (WCAG 2.2 AA) |
+| I | Deploy Config | 9 | Docker (multi-stage, non-root), Vercel, Render/Fly, Nginx, PM2, custom domain |
+| J | SEO & Meta | 14 | Favicon, robots.txt, sitemap, OG tags, canonical, JSON-LD, analytics, Google Consent Mode v2, llms.txt |
+| K | PWA & Service Worker | 5 | Manifest, SW registration, offline fallback, cache busting *(auto-detected)* |
+| L | E-commerce Tracking | 13 | GA4 + Meta Pixel events, purchase dedup, CAPI fallback *(auto-detected)* |
+| M | Billing & Subscription | 9 | Webhook events, signature verification, idempotency, dunning, plan limits *(auto-detected)* |
+| N | Legal & Compliance | 7 | Privacy policy, terms, cookie consent, refund policy, GDPR data export/deletion |
 
 ## Scoring
 

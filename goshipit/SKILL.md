@@ -2,7 +2,7 @@
 name: goshipit
 description: >
   Pre-launch codebase audit skill. Use when a developer is preparing to deploy
-  to production and wants a comprehensive readiness check. Runs 170+ checks
+  to production and wants a comprehensive readiness check. Runs 185 checks
   across secrets, security, code quality, tests, build/performance, reliability,
   accessibility, deploy config, SEO, PWA, and legal compliance. Dynamically
   detects the stack — no hardcoded framework lists. Saves prelaunch-report.md
