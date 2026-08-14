@@ -22,7 +22,7 @@
     },
     "license": "Apache-2.0",
     "bin": {
-        "goshipit": "./bin/install.js"
+        "goshipit": "bin/install.js"
     },
     "files": [
         "bin/",
