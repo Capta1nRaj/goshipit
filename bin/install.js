@@ -4,28 +4,42 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const src = path.join(__dirname, "..", "goshipit", "SKILL.md");
-const dest = path.join(os.homedir(), ".claude", "skills", "goshipit", "SKILL.md");
-const destDir = path.dirname(dest);
+const pkgRoot = path.join(__dirname, "..");
+const srcSkill = path.join(pkgRoot, "goshipit", "SKILL.md");
+const srcRefs = path.join(pkgRoot, "goshipit", "references");
 
-if (!fs.existsSync(src)) {
-  console.error("Error: SKILL.md not found in package. Reinstall goshipit.");
-  process.exit(1);
+const skillDir = path.join(os.homedir(), ".claude", "skills", "goshipit");
+const destSkill = path.join(skillDir, "SKILL.md");
+const destRefs = path.join(skillDir, "references");
+
+if (!fs.existsSync(srcSkill)) {
+    console.error("Error: SKILL.md not found in package. Reinstall goshipit.");
+    process.exit(1);
 }
 
-fs.mkdirSync(destDir, { recursive: true });
-fs.copyFileSync(src, dest);
+fs.mkdirSync(skillDir, { recursive: true });
+fs.copyFileSync(srcSkill, destSkill);
+
+if (fs.existsSync(srcRefs)) {
+    fs.mkdirSync(destRefs, { recursive: true });
+    for (const file of fs.readdirSync(srcRefs)) {
+        fs.copyFileSync(path.join(srcRefs, file), path.join(destRefs, file));
+    }
+}
 
 console.log(`
 ✅ goshipit skill installed!
 
-Location: ${dest}
+Location: ${skillDir}
 
-Usage in Claude Code:
-  /goshipit
+Usage in Claude Code — say any of:
+  goshipit
+  is my app ready?
+  can I deploy now?
+  prelaunch check
 
-Run before every production deploy to audit 170+ checks across
-secrets, security, code quality, tests, build, SEO, legal, and more.
+Runs 196 checks across secrets, security, code quality,
+tests, build, performance, SEO, legal, and more.
 
 Update anytime: npx goshipit@latest
 `);
