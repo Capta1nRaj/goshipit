@@ -1,0 +1,185 @@
+---
+description: >
+  Pre-launch codebase audit. 188 checks across secrets, security, code quality,
+  tests, build/performance, reliability, accessibility, deploy config, SEO, PWA,
+  e-commerce, billing, legal. Severity-weighted score out of 100. No live URL needed.
+  Trigger on: "goshipit", "is my app ready?", "can I deploy now?", "prelaunch check",
+  "review before launch", "is this production-ready?", "check my codebase",
+  "launch checklist", "ready to go live?", "audit before deploy",
+  "production readiness check", "should I merge to main?".
+alwaysApply: false
+---
+
+# goshipit — Pre-launch Codebase Audit
+
+188 checks. Stack-aware. Severity-weighted score out of 100. Saves prelaunch-report.md.
+
+**References path:** `~/.goshipit/references/`
+
+---
+
+## Step 1 — Stack Detection
+
+Run these terminal commands to detect the stack:
+
+```
+ls -la
+cat package.json 2>/dev/null
+cat pyproject.toml 2>/dev/null
+cat go.mod 2>/dev/null
+cat Cargo.toml 2>/dev/null
+ls *.config.* *.toml *.yaml *.yml Makefile Dockerfile* 2>/dev/null
+```
+
+Infer: framework, language, runtime, DB, auth lib, build tool, deploy target.
+
+- `turbo.json`/`nx.json` → monorepo
+- `bun.lockb` → Bun runtime
+- `pnpm-workspace.yaml` → pnpm monorepo
+- `fly.toml`/`vercel.json`/`netlify.toml`/`render.yaml` → deploy target
+- `ecosystem.config.*` → PM2
+- `nginx.conf` → Nginx
+
+Guard: No project files found → tell user "No codebase detected. Run goshipit from project root." and stop.
+
+Report detected stack before asking questions.
+
+---
+
+## Step 2 — Category Selection
+
+Ask the user (in chat):
+
+```
+Which areas to audit? (reply with numbers, comma-separated, or "all")
+
+1. All areas (recommended)
+2. Secrets & Security
+3. Code Quality & Tests
+4. Build & Performance
+5. Reliability, Hygiene, Deploy & SEO
+
+Include accessibility checks? (yes/no)
+Fix mode? (audit-only / audit+autofix)
+```
+
+Wait for reply. Map selections:
+- "all" or "1" → categories A, B, C, D, E, F, G, I, J, N (+ K/L/M auto)
+- "2" → A, C
+- "3" → B, D
+- "4" → E
+- "5" → F, G, I, J, N
+- accessibility yes → add H
+- K auto if: `manifest.json`/`sw.js`/`next-pwa`/workbox found
+- L auto if: payment lib/cart routes/checkout found
+- M auto if: payment/billing SDK in deps
+- N always runs
+
+---
+
+## Step 3 — Run Checks (Sequential)
+
+For each selected category, in order:
+
+1. Read the reference file:
+   ```
+   cat ~/.goshipit/references/checks-{X}-{name}.md
+   ```
+2. For each check row in the table, execute the described check using:
+   - `grep -r "pattern" . --include="*.ext" -l` for pattern searches
+   - `find . -name "filename"` for file existence
+   - `cat filename` to read specific files
+   - `ls -la` for directory contents
+3. Record result per check:
+   - **PASS** — checked, no issue
+   - **FAIL** — issue confirmed, include `file:line` as evidence
+   - **SKIP** — not applicable for this stack (state why)
+
+**Reference file → category mapping:**
+
+| Category | Reference file |
+|----------|---------------|
+| A — Secrets & Environment | `checks-a-secrets.md` |
+| B — Code Quality | `checks-b-quality.md` |
+| C — Security | `checks-c-security.md` |
+| D — Tests | `checks-d-tests.md` |
+| E — Build & Performance | `checks-e-build.md` |
+| F — Reliability | `checks-f-reliability.md` |
+| G — Codebase Hygiene | `checks-g-hygiene.md` |
+| H — Accessibility | `checks-h-accessibility.md` |
+| I — Deploy Config | `checks-i-deploy.md` |
+| J — SEO & Meta | `checks-j-seo.md` |
+| K — PWA & Service Worker | `checks-k-pwa.md` |
+| L — E-commerce | `checks-l-ecommerce.md` |
+| M — Billing & Subscription | `checks-m-billing.md` |
+| N — Legal & Compliance | `checks-n-legal.md` |
+
+**NEVER read .env*, .pem, .key, id_rsa, credentials.json files.**
+
+---
+
+## Step 4 — Score
+
+```
+Start: 100
+P0 FAIL: −10 pts each
+P1 FAIL: −3 pts each
+P2 FAIL: −1 pt each
+No floor.
+```
+
+Output:
+
+```
+┌─────────────────────────────────────────────────┐
+│  🚀 GOSHIPIT PRELAUNCH SCORE                    │
+│                                                 │
+│   74 / 100                              🟡      │
+│   ████████████████████░░░░░░░░░  74%            │
+│                                                 │
+│   ❌  P0 Blockers    1    −10 pts               │
+│   ⚠️   P1 Warnings   4    −12 pts               │
+│   📝  P2 Notes       4     −4 pts               │
+│   ✅  Passed        34                          │
+│   ⏭️   Skipped        3   (stack N/A)           │
+│                                                 │
+│   VERDICT: NOT READY - fix 1 P0 blocker first   │
+└─────────────────────────────────────────────────┘
+```
+
+| Score | Emoji | Verdict |
+|-------|-------|---------|
+| 90–100 | 🟢 | Ready to launch |
+| 75–89 | 🟡 | Launch with P1 fixes queued |
+| 50–74 | 🟠 | Fix P1s before launch |
+| 1–49 | 🔴 | Not ready - blockers present |
+| ≤0 | ☠️ | Severely broken |
+
+---
+
+## Step 5 — Report
+
+Save `prelaunch-report.md` in project root with:
+
+```markdown
+# Prelaunch Report — {date}
+
+**Score:** {N}/100 {emoji}
+**Stack:** {detected stack}
+**Verdict:** {verdict}
+
+## ❌ P0 Blockers
+| ID | Check | Evidence | Fix |
+|----|-------|----------|-----|
+
+## ⚠️ P1 Warnings
+| ID | Check | Evidence | Fix |
+
+## 📝 P2 Notes
+| ID | Check | Evidence | Fix |
+
+## ✅ Passed ({N} checks)
+## ⏭️ Skipped ({N} checks — stack N/A)
+```
+
+If fix mode = `audit+autofix`: offer safe fixes for P1/P2 with diff preview before applying. Never auto-fix P0 blockers — flag for manual review.

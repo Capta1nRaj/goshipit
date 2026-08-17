@@ -32,6 +32,40 @@ jobs:
           fi
           echo "changed=true" >> $GITHUB_OUTPUT
 
+      - name: Delete existing tag and release if present
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURR=v${{ steps.version.outputs.curr }}
+          # Delete GitHub release if exists
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/tags/${CURR} --jq '.id' 2>/dev/null || echo "")
+          if [ -n "$RELEASE_ID" ]; then
+            echo "Deleting release ${CURR} (id: ${RELEASE_ID})"
+            gh api -X DELETE repos/${{ github.repository }}/releases/${RELEASE_ID}
+          fi
+          # Delete remote tag if exists
+          if git ls-remote --tags origin | grep -q "refs/tags/${CURR}$"; then
+            echo "Deleting remote tag ${CURR}"
+            git push origin --delete ${CURR}
+          fi
+          # Delete local tag if exists
+          if git tag -l | grep -q "^${CURR}$"; then
+            git tag -d ${CURR}
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.version.outputs.changed == 'true'
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish to npm
+        if: steps.version.outputs.changed == 'true'
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Tag version
         if: steps.version.outputs.changed == 'true'
         run: |
@@ -40,21 +74,9 @@ jobs:
           git tag v${{ steps.version.outputs.curr }}
           git push origin v${{ steps.version.outputs.curr }}
 
-      - uses: actions/setup-node@v4
-        if: steps.version.outputs.changed == 'true'
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
       - name: Create GitHub Release
         if: steps.version.outputs.changed == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.curr }}
           generate_release_notes: true
-
-      - name: Publish to npm
-        if: steps.version.outputs.changed == 'true'
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
