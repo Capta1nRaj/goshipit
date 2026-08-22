@@ -10,7 +10,7 @@ After any edit to `goshipit/SKILL.md`, auto-sync these fields without being aske
 |---|---|---|
 | Check count | Sum `^| [A-Z][0-9]` rows across all `goshipit/references/checks-*.md` files | README.md headline + table intro + package.json `description` + SKILL.md header line |
 | Version | `version:` in SKILL.md frontmatter | `package.json` `version` field |
-| Category list | Categories A–N in SKILL.md | README.md `## What it checks` table (counts + coverage text) |
+| Category list | Categories A–O in SKILL.md | README.md `## What it checks` table (counts + coverage text) |
 | Features | Steps/behavior in SKILL.md | README.md `## Key features` list |
 
 ### How to count checks
@@ -36,7 +36,8 @@ Sum the per-file counts. Checks live in reference files, NOT in SKILL.md.
 | L | checks-l-ecommerce.md | 13 |
 | M | checks-m-billing.md | 9 |
 | N | checks-n-legal.md | 7 |
-| **Total** | | **188** |
+| O | checks-o-agent.md | 22 |
+| **Total** | | **210** |
 
 ### Sync checklist (run after every reference file OR SKILL.md edit)
 - [ ] Re-run grep count above; if total changed, update all four targets below

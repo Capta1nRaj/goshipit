@@ -1,7 +1,7 @@
 {
     "name": "goshipit",
-    "version": "0.1.3",
-    "description": "Pre-launch codebase audit for AI coding tools - 188 checks, stack-agnostic, no live URL needed.",
+    "version": "0.1.4",
+    "description": "Pre-launch codebase audit for AI coding tools - 210 checks, stack-agnostic, no live URL needed.",
     "keywords": [
         "claude",
         "claude-code",

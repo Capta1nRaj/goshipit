@@ -6,16 +6,16 @@
 [![Node.js](https://img.shields.io/node/v/goshipit)](https://nodejs.org)
 
 **Pre-launch codebase audit for AI coding tools.**  
-188 checks · 14 categories · 9 platforms · no live URL needed.
+210 checks · 15 categories · 10 platforms · no live URL needed.
 
-Say `goshipit` — your AI tool runs a full secrets, security, quality, performance, accessibility, SEO, billing, and legal audit. Severity-weighted score out of 100. Saves `prelaunch-report.md` with every finding, file reference, and fix step.
+Say `goshipit` — your AI tool runs a full secrets, security, quality, performance, accessibility, SEO, agent readiness, billing, and legal audit. Severity-weighted score out of 100. Saves `prelaunch-report.md` with every finding, file reference, and fix step.
 
 ```bash
 npx goshipit
 ```
 
 > [!CAUTION]
-> **Token hungry.** goshipit runs 188 checks and writes a full dev report. Use the category picker to stay lean — or feed the beast and ship.
+> **Token hungry.** goshipit runs 210 checks and writes a full dev report. Use the category picker to stay lean — or feed the beast and ship.
 
 ---
 
@@ -32,6 +32,7 @@ npx goshipit
 | [Cline](https://github.com/cline/cline) | VS Code `settings.json` (`cline.customInstructions`) | say it |
 | [GitHub Copilot](https://github.com/features/copilot) | VS Code `settings.json` (`github.copilot.chat.codeGeneration.instructions`) | say it |
 | [Continue.dev](https://continue.dev) | `~/.continue/prompts/goshipit.prompt` | `/goshipit` |
+| [OpenCode](https://opencode.ai) | `~/.config/opencode/skills/goshipit/` | say it in TUI |
 
 The installer auto-detects which tools you have and installs to all of them at once.
 
@@ -77,7 +78,7 @@ The AI runs a structured audit in up to 11 steps:
 |------|-------------|
 | 1 | **Stack detection** — reads project files, infers framework, runtime, DB, auth, deploy target, monorepo tool. No hardcoded lists. |
 | 1.5 | **Stack intelligence** — resolves framework-specific security patterns via context7 MCP, web search, or built-in knowledge. Builds a Stack Profile used by all checks. |
-| 2 | **Category picker** — choose which of the 14 categories to audit. Accessibility, fix mode, and DESIGN.md generation are asked separately. |
+| 2 | **Category picker** — choose which of the 15 categories to audit. Accessibility, fix mode, and DESIGN.md generation are asked separately. |
 | 3 | **Parallel checks** — one sub-agent per category runs simultaneously (Claude Code). Other platforms run sequentially. |
 | 4 | **Custom checks** — any free-form check typed in the picker is also run. |
 | 5 | **Score** — severity-weighted from 100. Can go negative. Score block printed inline. |
@@ -110,8 +111,11 @@ The AI runs a structured audit in up to 11 steps:
 | L | E-commerce Tracking | 13 | GA4 + Meta Pixel events, purchase deduplication, server-side CAPI fallback _(auto-detected)_ |
 | M | Billing & Subscription | 9 | Webhook events, signature verification, idempotency, dunning, plan enforcement _(auto-detected)_ |
 | N | Legal & Compliance | 7 | Privacy policy, terms, cookie consent, refund policy, GDPR data export/deletion |
+| O | Agent Readiness | 22 | robots.txt AI bots, llms.txt v2, sitemap.md, markdown mirrors, content negotiation, AGENTS.md, Link headers, MCP/A2A/WebMCP, API Catalog, OAuth discovery, x402/UCP/ACP _(always; protocol checks SKIP if stack N/A)_ |
 
-Categories K, L, M only trigger when relevant files are found. All others always run.
+> **Agent Readiness attribution:** Category O merges 4 independent sources — [Cloudflare's isitagentready.com](https://isitagentready.com) (1 part), [agent-ready.dev](https://agent-ready.dev), [Vercel Agent Readability Spec](https://vercel.com/kb/guide/agent-readability-spec), and [llmstxt.org](https://llmstxt.org). Only isitagentready.com is by Cloudflare; others are independent. Not affiliated with or endorsed by Cloudflare or Vercel. Implements open standards (RFC 8288, RFC 8615, RFC 9727/9728) in our own words.
+
+Categories K, L, M only trigger when relevant files are found. O protocol checks SKIP if stack N/A. All others always run.
 
 ---
 

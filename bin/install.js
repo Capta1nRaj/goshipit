@@ -498,6 +498,24 @@ const PLATFORMS = [
         uninstallPaths: [path.join(home, ".continue", "prompts", "goshipit.prompt")],
         usage: 'Type /goshipit in Continue.dev chat, or say "is my app ready?"',
     },
+    {
+        key: "opencode",
+        label: "OpenCode",
+        detect: () => dirExists(path.join(home, ".config", "opencode")) || dirExists(path.join(home, ".opencode")) || commandExists("opencode"),
+        installedAt: () => fileExists(path.join(home, ".config", "opencode", "skills", "goshipit", "SKILL.md")) || fileExists(path.join(home, ".opencode", "skills", "goshipit", "SKILL.md")),
+        install() {
+            // global: ~/.config/opencode/skills/goshipit (always)
+            const skillDir = path.join(home, ".config", "opencode", "skills", "goshipit");
+            ensureDir(skillDir);
+            copyFile(srcSkill, path.join(skillDir, "SKILL.md"));
+            copyDir(srcRefs, path.join(skillDir, "references"));
+            copyFile(path.join(srcAdapters, "opencode.md"), path.join(skillDir, "opencode.md"));
+            return path.join(skillDir, "SKILL.md");
+        },
+        verify:        () => verifyFile(path.join(home, ".config", "opencode", "skills", "goshipit", "SKILL.md")),
+        uninstallPaths: [path.join(home, ".config", "opencode", "skills", "goshipit")],
+        usage: 'Say "goshipit" or "is my app ready?" in OpenCode TUI',
+    },
 ];
 
 // ─── shared refs install ─────────────────────────────────────────────────────

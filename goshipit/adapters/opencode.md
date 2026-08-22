@@ -3,41 +3,49 @@
 **Triggers:** "goshipit", "is my app ready?", "can I deploy now?", "prelaunch check",
 "review before launch", "is this production-ready?", "check my codebase",
 "launch checklist", "ready to go live?", "audit before deploy",
-"production readiness check", "should I merge to main?"
+"production readiness check", "should I merge to main?", "am I missing anything before launch?"
 
-210 checks. Stack-aware. Score out of 100. Saves prelaunch-report.md.
+210 checks. Stack-aware. Severity-weighted score out of 100. Saves prelaunch-report.md. No live URL needed.
 
-**References:** `~/.goshipit/references/`
+**References path:** `~/.goshipit/references/`
 
 ---
 
 ## Step 1 — Stack Detection
 
-Use the terminal to detect the stack:
+Run terminal commands to detect the stack:
 
 ```bash
-ls -la && cat package.json 2>/dev/null && cat pyproject.toml 2>/dev/null && cat go.mod 2>/dev/null
+ls -la
+cat package.json 2>/dev/null
+cat pyproject.toml 2>/dev/null
+cat go.mod 2>/dev/null
+cat Cargo.toml 2>/dev/null
 ls *.config.* *.toml *.yaml *.yml Makefile Dockerfile* 2>/dev/null
 ```
 
 Infer: framework, language, runtime, DB, auth lib, build tool, deploy target.
 
+Key signals:
 - `turbo.json`/`nx.json` → monorepo
 - `bun.lockb` → Bun runtime
 - `pnpm-workspace.yaml` → pnpm monorepo
 - `fly.toml`/`vercel.json`/`netlify.toml`/`render.yaml` → deploy target
 - `ecosystem.config.*` → PM2
+- `nginx.conf` → Nginx
 
-Guard: No project files → tell user "No codebase detected. Run from project root." and stop.
+Guard: No project files → tell user "No codebase detected. Run goshipit from project root." and stop.
+
+Report detected stack before category picker.
 
 ---
 
 ## Step 2 — Category Selection
 
-Ask the user in the chat panel:
+Ask the user in chat:
 
 ```
-Which areas to audit?
+Which areas to audit? (MULTI-SELECT — type numbers comma-separated, e.g. "2,3,10" or "all")
 
 1. All areas — full audit (recommended) — 210 checks A-O: A Secrets 9 · C Security 35 · B Quality 18 · D Tests 4 · E Build 15 · F Reliability 21 · G Hygiene 14 · I Deploy 15 · J SEO 14 · K PWA 5 · L Ecom 13 · M Billing 9 · N Legal 7 · O Agent 22 (+ H A11y 9 via Next)
 2. Secrets & Environment — .env in git, hardcoded keys, multi-env drift, webhook URLs, test-mode keys — A (9)
@@ -50,13 +58,14 @@ Which areas to audit?
 9. Deploy & Infra — Docker non-root, Vercel/Render, Nginx, PM2, K8s limits/probes — I (15)
 10. SEO, PWA, Ecom, Billing, Legal & Agent — SEO meta, PWA SW, tracking, billing webhooks, GDPR, llms.txt, MCP/A2A, x402 — J,K,L,M,N,O (77 combined)
 
-Include accessibility? (yes/no)
+Examples: "all" or "1" → full audit | "2,3" → Secrets+Security | "4,5,10" → Quality+Tests+SEO/Agent | "7,9,10" → Reliability+Deploy+SEO/Agent
+Include accessibility checks? (yes/no)
 Fix mode? (audit-only / audit+autofix)
 ```
 
-Map reply:
-- "1"/all → A B C D E F G I J K L M N O (+ H via accessibility yes)
-- "2" → A  |  "3" → C  |  "4" → B  |  "5" → D  |  "6" → E  |  "7" → F  |  "8" → G  |  "9" → I  |  "10" → J K L M N O
+Wait for user reply (comma-separated, e.g. "2,3,10" or "all"). Map:
+- "all" or "1" or "1,2,3,4,5,6,7,8,9,10" → A, B, C, D, E, F, G, I, J, K, L, M, N, O (+ H via accessibility yes)
+- "2" or "2,3" etc → parse each number: 2→A, 3→C, 4→B, 5→D, 6→E, 7→F, 8→G, 9→I, 10→J,K,L,M,N,O — combine all selected
 - accessibility yes → add H
 - K/L/M auto still, but covered via 10 — also auto-run if signals found (K: `manifest.json`/`sw.js`/`next-pwa`/workbox, L: payment lib/cart routes/checkout, M: payment/billing SDK in deps)
 - N always (Legal), O always (Agent — SKIP if stack N/A)
@@ -65,17 +74,22 @@ Map reply:
 
 ## Step 3 — Run Checks
 
-For each category, sequentially:
+For each selected category, sequentially:
 
-```bash
-cat ~/.goshipit/references/checks-{letter}-{name}.md
-```
+1. Read the reference file from terminal:
+   ```bash
+   cat ~/.goshipit/references/checks-{letter}-{name}.md
+   ```
+2. For each check in the table, run the appropriate grep/find/cat command
+3. Record per check:
+   - **PASS** — no issue found
+   - **FAIL** — issue confirmed, include `file:line` evidence
+   - **SKIP** — stack N/A (state why)
 
-Read the check table, run each described check with grep/find/cat, record result:
-- **PASS** / **FAIL** (with `file:line` evidence) / **SKIP** (stack N/A)
+Reference files:
 
-| Cat | Reference file |
-|-----|---------------|
+| Cat | File |
+|-----|------|
 | A — Secrets | `checks-a-secrets.md` |
 | B — Code Quality | `checks-b-quality.md` |
 | C — Security | `checks-c-security.md` |
@@ -96,22 +110,31 @@ Read the check table, run each described check with grep/find/cat, record result
 
 ---
 
-## Step 4 — Score & Output
+## Step 4 — Score
 
 ```
-Start: 100 | P0 FAIL: −10 | P1 FAIL: −3 | P2 FAIL: −1
+Start: 100
+P0 FAIL: −10 pts
+P1 FAIL: −3 pts
+P2 FAIL: −1 pt
+No floor.
 ```
+
+Output score block:
 
 ```
 ┌─────────────────────────────────────────────────┐
 │  🚀 GOSHIPIT PRELAUNCH SCORE                    │
+│                                                 │
 │   74 / 100                              🟡      │
 │   ████████████████████░░░░░░░░░  74%            │
-│   ❌ P0 Blockers  1   −10 pts                   │
-│   ⚠️  P1 Warnings 4   −12 pts                   │
-│   📝 P2 Notes     4    −4 pts                   │
-│   ✅ Passed      34                             │
-│   ⏭️  Skipped     3   (stack N/A)               │
+│                                                 │
+│   ❌  P0 Blockers    1    −10 pts               │
+│   ⚠️   P1 Warnings   4    −12 pts               │
+│   📝  P2 Notes       4     −4 pts               │
+│   ✅  Passed        34                          │
+│   ⏭️   Skipped        3   (stack N/A)           │
+│                                                 │
 │   VERDICT: NOT READY - fix 1 P0 blocker first   │
 └─────────────────────────────────────────────────┘
 ```
@@ -126,10 +149,31 @@ Start: 100 | P0 FAIL: −10 | P1 FAIL: −3 | P2 FAIL: −1
 
 ---
 
-## Step 5 — Save Report
+## Step 5 — Report
 
-Write `prelaunch-report.md` in project root with score, verdict, all FAIL/PASS/SKIP items grouped by severity.
+Save `prelaunch-report.md` in project root:
 
-Fix mode `audit+autofix`: propose P1/P2 fixes with diffs, apply after user confirms. Never auto-fix P0.
+```markdown
+# Prelaunch Report — {date}
+
+**Score:** {N}/100 {emoji}
+**Stack:** {detected stack}
+**Verdict:** {verdict}
+
+## ❌ P0 Blockers
+| ID | Check | Evidence | Fix |
+|----|-------|----------|-----|
+
+## ⚠️ P1 Warnings
+...
+
+## 📝 P2 Notes
+...
+
+## ✅ Passed ({N})
+## ⏭️ Skipped ({N} — stack N/A)
+```
+
+Fix mode `audit+autofix`: offer safe fixes for P1/P2 with diff preview. Never auto-apply P0 fixes.
 
 > **Attribution:** Agent Readiness checks merge 4 independent sources — Cloudflare's isitagentready.com (1 part), agent-ready.dev, Vercel Agent Readability Spec, and llmstxt.org v2. Only isitagentready.com is by Cloudflare; others are independent. Not affiliated with or endorsed by Cloudflare or Vercel.

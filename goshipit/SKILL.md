@@ -8,9 +8,9 @@ description: >
     "check my codebase", "launch checklist", "ready to go live?",
     "audit before deploy", "is my project ship-ready?", "should I merge to main?",
     "am I missing anything before launch?", "what could break in production?".
-    Runs 188 checks across secrets, security, code quality, tests,
+    Runs 210 checks across secrets, security, code quality, tests,
     build/performance, reliability, accessibility, deploy config, SEO, PWA,
-    and legal compliance. Dynamically detects the stack - no hardcoded framework
+    agent readiness, and legal compliance. Dynamically detects the stack - no hardcoded framework
     lists. Saves prelaunch-report.md with check IDs and code refs.
     Severity-weighted score out of 100. No live URL needed - codebase only.
     Do NOT use for post-launch monitoring, live site audits, or SEO rank tracking.
@@ -54,7 +54,7 @@ tags:
     - goshipit
 metadata:
     author: priyalraj
-    version: 0.1.3
+    version: 0.1.4
     npm: goshipit
     platforms:
         - claude-code
@@ -78,8 +78,10 @@ metadata:
 
 # goshipit
 
-Pre-launch codebase audit. 188 checks. Stack-aware, severity-weighted, saves prelaunch-report.md. No live URL needed.
+Pre-launch codebase audit. 210 checks. Stack-aware, severity-weighted, saves prelaunch-report.md. No live URL needed.
 Install: `npx goshipit` | Repo: https://github.com/Capta1nRaj/goshipit
+
+> **Attribution:** Agent Readiness (22 checks) merges 4 independent sources — [Cloudflare's isitagentready.com](https://isitagentready.com) (1 part), [agent-ready.dev](https://agent-ready.dev), [Vercel Agent Readability Spec](https://vercel.com/kb/guide/agent-readability-spec), and [llmstxt.org](https://llmstxt.org) v2. Only isitagentready.com is by Cloudflare; others are independent. Not affiliated with or endorsed by Cloudflare or Vercel. Implements open standards (RFC 8288, RFC 8615, RFC 9727/9728) in our own words.
 
 ## Step 1 - Stack Detection (auto, fully dynamic)
 
@@ -153,11 +155,17 @@ Options: list all detected workspaces + `All workspaces`. Score = lowest workspa
 
 **Q1** `multiSelect: true` · header: `Audit Areas` · question: `Which areas to audit?`
 
-- `All areas` - full audit (recommended)
-- `Secrets & Security` - keys, .env, validation, rate limiting, CVEs, CORS, cookies, CSP, HSTS
-- `Code Quality & Tests` - debug logs, TODOs, dead code, unused deps, tests, coverage, E2E
-- `Build & Performance` - bundle, types, N+1, render-blocking, images, cache, compression, SW
-- `Reliability, Hygiene, Deploy & SEO` - errors, logging, migrations, .gitignore, README, Nginx, Docker, Vercel, SEO, legal
+- `All areas` - full audit (recommended) — 210 checks A-O:
+  A Secrets 9 · C Security 35 · B Quality 18 · D Tests 4 · E Build 15 · F Reliability 21 · G Hygiene 14 · I Deploy 15 · J SEO 14 · K PWA 5 · L Ecom 13 · M Billing 9 · N Legal 7 · O Agent 22 (+ H A11y 9 via Next)
+- `Secrets & Environment` - .env in git, hardcoded keys, multi-env drift, webhook URLs, test-mode keys — A (9)
+- `Security` - SQLi, XSS, CORS, CSP/HSTS, rate-limit, CSRF, CVEs, BOLA/IDOR, auth, SSRF — C (35)
+- `Code Quality` - console.log, TODOs, dead code, complexity, leaks, promises, strict TS — B (18)
+- `Tests` - suite pass, coverage, skipped, E2E — D (4)
+- `Build & Performance` - build errors, types, bundle, N+1, images, cache, SSR — E (15)
+- `Reliability` - runtime pin, error handling, monitoring, DB migrations, pooling — F (21)
+- `Hygiene` - conflicts, .gitignore, README, large files, linter, CI secrets — G (14)
+- `Deploy & Infra` - Docker non-root, Vercel/Render, Nginx, PM2, K8s limits/probes — I (15)
+- `SEO, PWA, Ecom, Billing, Legal & Agent` - SEO meta, PWA SW, tracking, billing webhooks, GDPR, llms.txt, MCP/A2A, x402 — J,K,L,M,N,O (77 combined)
 
 **Q2** `multiSelect: false` · header: `Accessibility` · question: `Include accessibility checks?`
 
@@ -179,16 +187,22 @@ If `DESIGN.md` already exists at project root → skip Q4 entirely, skip Step 11
 
 **Mapping:**
 
-- Q1 `All areas` → cats A–N (+ K/L/M auto when detected)
-- `Secrets & Security` → A, C
-- `Code Quality & Tests` → B, D
+- Q1 `All areas` → cats A–O (+ K/L/M auto when detected) — 210 checks
+- `Secrets & Environment` → A
+- `Security` → C
+- `Code Quality` → B
+- `Tests` → D
 - `Build & Performance` → E
-- `Reliability, Hygiene, Deploy & SEO` → F, G, I, J, N
-- All 4 specific selected → same as `All areas`
+- `Reliability` → F
+- `Hygiene` → G
+- `Deploy & Infra` → I
+- `SEO, PWA, Ecom, Billing, Legal & Agent` → J, K, L, M, N, O (+ H via Q2)
+- All 9 specific selected → same as `All areas`
 - Cat K (PWA) **auto-runs** if `manifest.json`, `sw.js`, `next-pwa`, or workbox detected
 - Cat L (E-commerce) **auto-runs** if payment lib, cart routes, product schema, or checkout detected
 - Cat M (Billing) **auto-runs** if any payment/billing SDK in deps or source
 - Cat N (Legal) **always runs**
+- Cat O (Agent Readiness) **always runs** - protocol checks SKIP if stack N/A (no API/auth/commerce)
 - Step 9 **always runs** - Step 10 (build) is optional, user is asked before running
 - Q2 `Yes` → also cat H
 - Q3 `Audit + auto-fix` → Step 7 triage can auto-apply safe fixes (Step 8 reference)
@@ -254,11 +268,16 @@ Single message, all agents simultaneously:
 
 | Selected area                        | Agents for categories                                     |
 | ------------------------------------ | --------------------------------------------------------- |
-| `All areas`                          | A, B, C, D, E, F, G, H (if Q2=Yes), I, J, N + auto: K/L/M |
-| `Secrets & Security`                 | A, C                                                      |
-| `Code Quality & Tests`               | B, D                                                      |
+| `All areas`                          | A, B, C, D, E, F, G, H (if Q2=Yes), I, J, K, L, M, N, O |
+| `Secrets & Environment`              | A                                                         |
+| `Security`                           | C                                                         |
+| `Code Quality`                       | B                                                         |
+| `Tests`                              | D                                                         |
 | `Build & Performance`                | E                                                         |
-| `Reliability, Hygiene, Deploy & SEO` | F, G, I, J, N                                             |
+| `Reliability`                        | F                                                         |
+| `Hygiene`                            | G                                                         |
+| `Deploy & Infra`                     | I                                                         |
+| `SEO, PWA, Ecom, Billing, Legal & Agent` | J, K, L, M, N, O                                    |
 | Accessibility (Q2=Yes)               | H                                                         |
 | PWA auto                             | K                                                         |
 | E-commerce auto                      | L                                                         |
@@ -290,6 +309,7 @@ Check definitions live in `references/` alongside this SKILL.md - one file per c
 | L   | 12  | E-commerce Tracking    | `checks-l-ecommerce.md`     | payment lib / cart routes / checkout detected       |
 | M   | 13  | Billing & Subscription | `checks-m-billing.md`       | payment/billing SDK in deps or source               |
 | N   | 14  | Legal & Compliance     | `checks-n-legal.md`         | always                                              |
+| O   | 15  | Agent Readiness        | `checks-o-agent.md`         | always (protocol checks SKIP if stack N/A)          |
 
 ---
 

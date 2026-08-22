@@ -38,11 +38,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           CURR=v${{ steps.version.outputs.curr }}
-          # Delete GitHub release if exists
-          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/tags/${CURR} --jq '.id' 2>/dev/null || echo "")
-          if [ -n "$RELEASE_ID" ]; then
+          # Delete GitHub release if exists (delete only if exists, else skip) — handles 404 JSON
+          RAW=$(gh api repos/${{ github.repository }}/releases/tags/${CURR} 2>&1 || true)
+          RELEASE_ID=$(echo "$RAW" | jq -r '.id // empty' 2>/dev/null || echo "")
+          if [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "null" ] && echo "$RELEASE_ID" | grep -qE '^[0-9]+$'; then
             echo "Deleting release ${CURR} (id: ${RELEASE_ID})"
-            gh api -X DELETE repos/${{ github.repository }}/releases/${RELEASE_ID}
+            gh api -X DELETE "repos/${{ github.repository }}/releases/${RELEASE_ID}"
+          else
+            echo "No existing release ${CURR} — skipping delete"
           fi
           # Delete remote tag if exists
           if git ls-remote --tags origin | grep -q "refs/tags/${CURR}$"; then
