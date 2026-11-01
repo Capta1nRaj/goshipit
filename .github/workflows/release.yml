@@ -60,14 +60,22 @@ jobs:
       - uses: actions/setup-node@v4
         if: steps.version.outputs.changed == 'true'
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing (OIDC) needs npm >= 11.5.1
+      - name: Upgrade npm
+        if: steps.version.outputs.changed == 'true'
+        run: npm install -g npm@latest
+
+      - name: Verify check counts and versions
+        if: steps.version.outputs.changed == 'true'
+        run: node skills/goshipit/scripts/config.js verify
 
       - name: Publish to npm
         if: steps.version.outputs.changed == 'true'
+        # OIDC via npm trusted publisher; no NPM_TOKEN needed
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Tag version
         if: steps.version.outputs.changed == 'true'

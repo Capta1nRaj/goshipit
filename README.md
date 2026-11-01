@@ -15,40 +15,46 @@ npx goshipit
 ```
 
 > [!CAUTION]
-> **Token hungry.** goshipit runs 210 checks and writes a full dev report. Use the category picker to stay lean — or feed the beast and ship.
+> **Token hungry.** goshipit runs 210 checks and writes a full dev report. Untick sections or checks in `goshipit.md` to stay lean — sub-agents only receive the checks you leave ticked.
 
 ---
 
 ## Supported AI tools
 
-| Tool | Install location | Trigger |
+goshipit is an [Agent Skills](https://agentskills.io) skill: one folder (`SKILL.md` + `scripts/` + `assets/` + `references/`) that every tool below loads natively. No per-tool rule files, no settings.json edits.
+
+| Tool | Global skill dir | Trigger |
 |------|-----------------|---------|
 | [Claude Code](https://claude.ai/code) | `~/.claude/skills/goshipit/` | `/goshipit` or say it |
-| [Cursor](https://cursor.com) | `~/.cursor/rules/goshipit.mdc` | say it in Agent |
-| [Windsurf](https://windsurf.com) | `~/.codeium/windsurf/memories/goshipit.md` | say it in Cascade |
-| [OpenAI Codex CLI](https://github.com/openai/codex) | `~/.codex/goshipit.md` | say it |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `~/.gemini/GEMINI.md` (appended) | say it |
-| [Zed](https://zed.dev) | `~/.config/zed/prompts/goshipit.md` | say it in Agent |
-| [Cline](https://github.com/cline/cline) | VS Code `settings.json` (`cline.customInstructions`) | say it |
-| [GitHub Copilot](https://github.com/features/copilot) | VS Code `settings.json` (`github.copilot.chat.codeGeneration.instructions`) | say it |
-| [Continue.dev](https://continue.dev) | `~/.continue/prompts/goshipit.prompt` | `/goshipit` |
+| [OpenAI Codex CLI](https://github.com/openai/codex) | `~/.agents/skills/goshipit/` | say it |
+| [Cline](https://github.com/cline/cline) | `~/.agents/skills/goshipit/` | say it |
+| [Zed](https://zed.dev) | `~/.agents/skills/goshipit/` | say it in Agent |
+| [Cursor](https://cursor.com) | `~/.cursor/skills/goshipit/` | say it in Agent |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `~/.gemini/skills/goshipit/` | say it |
+| [GitHub Copilot](https://github.com/features/copilot) | `~/.copilot/skills/goshipit/` | say it in agent mode / CLI |
+| [Windsurf](https://windsurf.com) | `~/.codeium/windsurf/skills/goshipit/` | say it in Cascade |
+| [Continue](https://continue.dev) | `~/.continue/skills/goshipit/` | say it |
 | [OpenCode](https://opencode.ai) | `~/.config/opencode/skills/goshipit/` | say it in TUI |
 
-The installer auto-detects which tools you have and installs to all of them at once.
+Any other Agent Skills client that reads `~/.agents/skills/` picks it up too. The installer auto-detects your tools and copies the skill into each one's dir.
 
 ---
 
 ## Install
 
 ```bash
-npx goshipit
+npx goshipit                 # pick tools, install globally (~)
+npx goshipit -y              # skip picker, install to all detected tools
+npx goshipit --project       # install into this repo (.agents/skills, .claude/skills, ...) to commit for your team
 ```
 
-Interactive picker — select which AI tools to install. Installs shared check references to `~/.goshipit/references/` (read by all platforms).
+Or with the [skills CLI](https://github.com/vercel-labs/skills):
 
 ```bash
-npx goshipit -y          # skip picker, install all detected tools
+npx skills add Capta1nRaj/goshipit
 ```
+
+Upgrading from v0.1.x? Just run `npx goshipit@latest` — old pointer files (`~/.goshipit/`, Cursor rules, Windsurf memories, `GEMINI.md`/`AGENTS.md` blocks, VS Code settings entries, Zed/Continue prompts) are removed automatically. Only files goshipit wrote are touched.
 
 ---
 
@@ -57,11 +63,13 @@ npx goshipit -y          # skip picker, install all detected tools
 ```bash
 npx goshipit                # install (interactive picker)
 npx goshipit --uninstall    # remove (interactive picker)
+npx goshipit --project      # install/uninstall/status in current repo instead of ~
 npx goshipit --status       # show detected + installed status with paths
 npx goshipit --version      # local version + npm latest check
 npx goshipit --dry-run      # preview what would install/remove, touch nothing
 npx goshipit -y             # skip picker (CI / scripting)
 npx goshipit@latest         # update to latest version
+npx goshipit init [--force] # create goshipit.md in current project (--force overwrites)
 ```
 
 ---
@@ -72,24 +80,82 @@ Once installed, say any trigger phrase in your AI tool:
 
 > `goshipit` · `is my app ready?` · `can I deploy now?` · `prelaunch check` · `review before launch` · `production readiness check` · `should I merge to main?`
 
-The AI runs a structured audit in up to 11 steps:
+No in-chat menus. What runs is decided by `goshipit.md` in your project root.
 
 | Step | What happens |
 |------|-------------|
-| 1 | **Stack detection** — reads project files, infers framework, runtime, DB, auth, deploy target, monorepo tool. No hardcoded lists. |
-| 1.5 | **Stack intelligence** — resolves framework-specific security patterns via context7 MCP, web search, or built-in knowledge. Builds a Stack Profile used by all checks. |
-| 2 | **Category picker** — choose which of the 15 categories to audit. Accessibility, fix mode, and DESIGN.md generation are asked separately. |
-| 3 | **Parallel checks** — one sub-agent per category runs simultaneously (Claude Code). Other platforms run sequentially. |
-| 4 | **Custom checks** — any free-form check typed in the picker is also run. |
-| 5 | **Score** — severity-weighted from 100. Can go negative. Score block printed inline. |
-| 6 | **Report** — `prelaunch-report.md` saved with every finding grouped by severity, file:line evidence, and fix steps. |
-| 7 | **Issue triage** — pick which issues to fix right now, directly from the report. |
-| 8 | **Auto-fix** — safe, reversible fixes applied with diff preview and confirmation. Unsafe fixes (SQLi, auth, N+1) explained with code snippets instead. |
-| 9 | **Package update check** — detects outdated deps, flags major-version breaks separately. |
-| 10 | **Build verification** (optional) — runs your production build command, flags compile errors as P0. |
-| 11 | **DESIGN.md generation** (optional) — inspects your design tokens and writes a Google DESIGN.md spec file. |
+| 0 | **Config** — first run creates `goshipit.md` (K/L/M auto-unticked when not detected) and asks once: run with defaults or stop to edit. Later runs read it and add any checks new to your goshipit version. |
+| 1 | **Stack detection + Stack Profile** — infers framework, runtime, DB, auth, deploy target, monorepo tool from files (no hardcoded lists), then resolves stack-specific patterns via context7, web docs, or built-in knowledge. |
+| 2 | **Checks** — ticked sections are grouped into up to `max_agents` balanced batches. Each batch receives only its ticked check rows. Parallel sub-agents on Claude Code; other tools run batches sequentially. Custom checks run last. |
+| 3 | **Score** — severity-weighted from 100. Can go negative. |
+| 4 | **Report** — `prelaunch-report.md` with every finding as a checkbox, grouped by severity, with file:line evidence and fix steps. |
+| 5 | **Fix** — `fix_mode: auto-fix` applies safe fixes with diff preview. Or tick items in the report and say `goshipit fix`. |
+| 6 | **Outdated packages** (`outdated: yes`) — flags major-version breaks separately. |
+| 7 | **Build** (`build: yes`) — runs your production build; failure = P0 and the score is updated. |
+| 8 | **DESIGN.md** (`design_md: yes`, only if none exists) — writes a Google DESIGN.md spec file from your design tokens. |
 
-> Steps 9 and 10 always run. Steps 11 runs only if no `DESIGN.md` exists and user opts in. On **Claude Code**, categories run in parallel via sub-agents — full audit in minutes, not hours.
+> Steps 6–8 run only when enabled in `goshipit.md`. On **Claude Code**, batches run in parallel via sub-agents — full audit in minutes, not hours.
+
+---
+
+## Configure with goshipit.md
+
+Created automatically on first run, or manually:
+
+```bash
+npx goshipit init            # writes ./goshipit.md
+npx goshipit init --force    # overwrite an existing one
+```
+
+Format (all 210 checks, section-wise):
+
+```markdown
+---
+fix_mode: audit-only     # audit-only | auto-fix (safe fixes applied with diff preview)
+build: no                # yes | no - run production build, failure = P0
+outdated: yes            # yes | no - outdated package check
+design_md: no            # yes | no - generate DESIGN.md if missing
+workspaces: all          # monorepo only: all | comma list e.g. apps/web,apps/api
+max_agents: 5            # max parallel sub-agents (tools without sub-agents run sequentially)
+---
+
+# goshipit checks (210)
+
+## [x] A · Secrets & Environment (9)
+- [x] A1 · Hardcoded secrets and API keys in source
+- [x] A2 · .env files tracked in git
+- [ ] A3 · .env.example file exists
+...
+
+## [ ] K · PWA & Service Worker (5)
+...
+
+## [x] Custom checks
+- [x] Payment webhook verifies signature
+```
+
+**Selection rules**
+
+| Box | Effect |
+|-----|--------|
+| Section unticked | Whole section skipped |
+| Section ticked | Only its ticked rows run |
+| Custom checks | Each ticked line runs as a free-form check |
+
+New checks from a goshipit update are appended ticked and marked `(new)`; your edits are never removed or reordered.
+
+**Settings**
+
+| Key | Values | Default | Effect |
+|-----|--------|---------|--------|
+| `fix_mode` | `audit-only` \| `auto-fix` | `audit-only` | Apply safe fixes with diff preview during the run |
+| `build` | `yes` \| `no` | `no` | Run production build; failure = P0 |
+| `outdated` | `yes` \| `no` | `yes` | Outdated package check |
+| `design_md` | `yes` \| `no` | `no` | Generate `DESIGN.md` if missing |
+| `workspaces` | `all` \| comma list | `all` | Monorepo workspaces to audit |
+| `max_agents` | number | `5` | Max parallel sub-agents |
+
+**Fixing:** the report lists every finding as `- [ ]`. Tick the ones you want, then say `goshipit fix`.
 
 ---
 
@@ -115,7 +181,7 @@ The AI runs a structured audit in up to 11 steps:
 
 > **Agent Readiness attribution:** Category O merges 4 independent sources — [Cloudflare's isitagentready.com](https://isitagentready.com) (1 part), [agent-ready.dev](https://agent-ready.dev), [Vercel Agent Readability Spec](https://vercel.com/kb/guide/agent-readability-spec), and [llmstxt.org](https://llmstxt.org). Only isitagentready.com is by Cloudflare; others are independent. Not affiliated with or endorsed by Cloudflare or Vercel. Implements open standards (RFC 8288, RFC 8615, RFC 9727/9728) in our own words.
 
-Categories K, L, M only trigger when relevant files are found. O protocol checks SKIP if stack N/A. All others always run.
+Categories K, L, M are unticked in `goshipit.md` at init when no matching files are found. O protocol checks SKIP if stack N/A. Everything else is ticked by default.
 
 ---
 
@@ -163,7 +229,7 @@ The score block is printed inline with a filled progress bar. Output example:
 
 ## Auto-fix
 
-After the audit, the issue triage step lets you pick which findings to address immediately. For safe, reversible issues goshipit applies the fix with a diff preview and confirmation. For issues that require human judgment it shows exactly what to change and where — with a code snippet — without touching the file.
+Two ways in: set `fix_mode: auto-fix` in `goshipit.md`, or tick findings in `prelaunch-report.md` and say `goshipit fix`. For safe, reversible issues goshipit applies the fix with a diff preview and confirmation. For issues that require human judgment it shows exactly what to change and where — with a code snippet — without touching the file.
 
 **Auto-fixable:** `.env` in git, missing `alt` attributes, `console.log` in prod paths, missing TS `strict`, render-blocking scripts, `.gitignore` gaps, missing viewport meta, missing `lang` on `<html>`.
 
@@ -182,13 +248,17 @@ After the audit, the issue triage step lets you pick which findings to address i
 
 Open an [issue](https://github.com/Capta1nRaj/goshipit/issues) or PR.
 
-To add a check: pick the right file in `goshipit/references/`, add a table row following the existing format, then re-run the count sync:
+To add a check:
+
+1. Add a table row in the right `skills/goshipit/references/checks-*.md` file, following the existing format.
+2. Add the matching `- [x] <ID> · <short title>` row to `skills/goshipit/assets/template.md` in the same order, and bump that section's `(N)` count plus the `(210)` header.
+3. Run the verifier:
 
 ```bash
-grep -c "^| [A-Z][0-9]" goshipit/references/checks-*.md
+node skills/goshipit/scripts/config.js verify
 ```
 
-Update the total in `SKILL.md`, `README.md`, and `package.json`. The CLAUDE.md in this repo enforces this automatically.
+It checks template vs references, section counts, and the total in `SKILL.md`, `README.md`, and `package.json`. The CLAUDE.md in this repo enforces this automatically.
 
 Tag [@Capta1nCodes](https://x.com/Capta1nCodes) on X with feedback or bug reports.
 

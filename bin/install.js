@@ -1,44 +1,37 @@
 #!/usr/bin/env node
+// goshipit installer - copies the Agent Skills bundle (skills/goshipit/) into
+// each AI tool's native skills directory. Spec: https://agentskills.io
+// Zero deps, Node >= 18.
 
-const fs   = require("fs");
-const path = require("path");
-const os   = require("os");
-const rl   = require("readline");
-const { execSync } = require("child_process");
-const https = require("https");
+const fs     = require("fs");
+const path   = require("path");
+const os     = require("os");
+const rl     = require("readline");
+const crypto = require("crypto");
+const { execSync, execFileSync } = require("child_process");
+const https  = require("https");
 
 // ─── constants ──────────────────────────────────────────────────────────────
 
-const home    = os.homedir();
-const isWin   = process.platform === "win32";
-const isTTY   = process.stdout.isTTY;
-const pkgJson = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
-const VERSION = pkgJson.version;
+const home     = os.homedir();
+const isWin    = process.platform === "win32";
+const isTTY    = process.stdout.isTTY;
+const pkgRoot  = path.join(__dirname, "..");
+const pkgJson  = JSON.parse(fs.readFileSync(path.join(pkgRoot, "package.json"), "utf8"));
+const VERSION  = pkgJson.version;
 const PKG_NAME = pkgJson.name;
 
-const pkgRoot    = path.join(__dirname, "..");
-const srcSkill   = path.join(pkgRoot, "goshipit", "SKILL.md");
-const srcRefs    = path.join(pkgRoot, "goshipit", "references");
-const srcAdapters = path.join(pkgRoot, "goshipit", "adapters");
-const sharedDir  = path.join(home, ".goshipit");
-const sharedRefs = path.join(sharedDir, "references");
+const SKILL_NAME  = "goshipit";
+const srcDir      = path.join(pkgRoot, "skills", SKILL_NAME);
+const srcSkill    = path.join(srcDir, "SKILL.md");
+const srcConfigJs = path.join(srcDir, "scripts", "config.js");
 
 // ─── colors (ANSI, no deps) ─────────────────────────────────────────────────
 
 const c = isTTY ? {
-    reset:   "\x1b[0m",
-    bold:    "\x1b[1m",
-    dim:     "\x1b[2m",
-    green:   "\x1b[32m",
-    yellow:  "\x1b[33m",
-    red:     "\x1b[31m",
-    cyan:    "\x1b[36m",
-    blue:    "\x1b[34m",
-    magenta: "\x1b[35m",
-    white:   "\x1b[37m",
-} : Object.fromEntries(
-    ["reset","bold","dim","green","yellow","red","cyan","blue","magenta","white"].map(k => [k, ""])
-);
+    reset: "\x1b[0m", bold: "\x1b[1m", dim: "\x1b[2m",
+    green: "\x1b[32m", yellow: "\x1b[33m", red: "\x1b[31m", cyan: "\x1b[36m",
+} : Object.fromEntries(["reset","bold","dim","green","yellow","red","cyan"].map(k => [k, ""]));
 
 const col = {
     ok:   (s) => `${c.green}${s}${c.reset}`,
@@ -52,196 +45,395 @@ const col = {
 // ─── flags ───────────────────────────────────────────────────────────────────
 
 const args        = process.argv.slice(2);
+const isInit      = args[0] === "init";
 const isUninstall = args.includes("--uninstall");
 const isStatus    = args.includes("--status");
 const isVersion   = args.includes("--version") || args.includes("-v");
 const isDryRun    = args.includes("--dry-run");
 const isYes       = args.includes("--yes") || args.includes("-y");
 const isHelp      = args.includes("--help") || args.includes("-h");
+const isProject   = args.includes("--project") || args.includes("-p");
+
+// install scope: global (~) or project (cwd), mirroring `npx skills add [-g]`
+const scopeRoot  = isProject ? process.cwd() : home;
+const scopeLabel = isProject ? "project" : "global";
+
+const notes = [];
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function dirExists(p)  { try { return fs.statSync(p).isDirectory(); } catch { return false; } }
 function fileExists(p) { try { return fs.statSync(p).isFile();      } catch { return false; } }
+function isLink(p)     { try { return fs.lstatSync(p).isSymbolicLink(); } catch { return false; } }
+function readText(p)   { try { return fs.readFileSync(p, "utf8"); } catch { return null; } }
+function shortHash(s)  { return crypto.createHash("sha256").update(s).digest("hex").slice(0, 16); }
+function tilde(p) {
+    const cwd = process.cwd();
+    if (isProject && p.startsWith(cwd + path.sep)) return "." + p.slice(cwd.length);
+    return p.startsWith(home) ? "~" + p.slice(home.length) : p;
+}
 
 function commandExists(cmd) {
     try {
-        execSync(isWin ? `where ${cmd}` : `which ${cmd}`, { stdio: "pipe" });
+        execSync(isWin ? `where ${cmd}` : `command -v ${cmd}`, { stdio: "pipe", shell: isWin ? undefined : "/bin/sh" });
         return true;
     } catch { return false; }
 }
 
-function copyDir(src, dest) {
-    if (!isDryRun) fs.mkdirSync(dest, { recursive: true });
-    for (const file of fs.readdirSync(src)) {
-        const s = path.join(src, file);
-        const d = path.join(dest, file);
-        if (fs.statSync(s).isDirectory()) copyDir(s, d);
-        else if (!isDryRun) fs.copyFileSync(s, d);
-    }
-}
-
-function ensureDir(p) {
-    if (!isDryRun) fs.mkdirSync(p, { recursive: true });
-}
-
-function copyFile(src, dest) {
-    if (isDryRun) {
-        console.log(`  ${col.dim("[dry-run] would copy → " + dest)}`);
-        return;
-    }
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(src, dest);
+function writeText(p, content) {
+    if (isDryRun) { console.log(`  ${col.dim("[dry-run] would write " + tilde(p))}`); return; }
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, content, "utf8");
 }
 
 function removePath(p) {
-    if (!fs.existsSync(p)) return false;
-    if (isDryRun) {
-        console.log(`  ${col.dim("[dry-run] would remove " + p)}`);
-        return true;
-    }
-    const stat = fs.statSync(p);
-    if (stat.isDirectory()) fs.rmSync(p, { recursive: true, force: true });
-    else fs.unlinkSync(p);
+    if (!fs.existsSync(p) && !isLink(p)) return false;
+    if (isDryRun) { console.log(`  ${col.dim("[dry-run] would remove " + tilde(p))}`); return true; }
+    fs.rmSync(p, { recursive: true, force: true });
     return true;
 }
 
-function verifyFile(p) {
-    try { return fs.existsSync(p) && fs.statSync(p).size > 0; }
-    catch { return false; }
+function copyDir(src, dest) {
+    fs.mkdirSync(dest, { recursive: true });
+    for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+        const s = path.join(src, entry.name);
+        const d = path.join(dest, entry.name);
+        if (entry.isDirectory()) copyDir(s, d);
+        else if (entry.isFile()) fs.copyFileSync(s, d);
+    }
 }
 
-// ─── VS Code settings.json helpers ───────────────────────────────────────────
+// Version recorded in an installed SKILL.md (metadata.version), or null.
+function skillVersionAt(dir) {
+    const t = readText(path.join(dir, "SKILL.md"));
+    if (t === null) return null;
+    const m = t.match(/^\s+version:\s*["']?([^\s"']+)/m) || t.match(/^version:\s*["']?([^\s"']+)/m);
+    return m ? m[1] : "?";
+}
+
+// A skills/<name> dir is ours only if its SKILL.md says `name: goshipit`.
+function isOurSkillDir(dir) {
+    const t = readText(path.join(dir, "SKILL.md"));
+    return t !== null && /^name:\s*["']?goshipit["']?\s*$/m.test(t);
+}
+
+// Replace dest with a fresh copy of the skill bundle. Returns "installed" | "updated".
+function installSkill(dest) {
+    const exists = fs.existsSync(dest) || isLink(dest);
+    if (exists && !isLink(dest) && !isOurSkillDir(dest)) {
+        throw new Error(`${tilde(dest)} exists and is not a goshipit skill - left untouched`);
+    }
+    const action = exists ? "updated" : "installed";
+    if (isDryRun) {
+        console.log(`  ${col.dim("[dry-run] would copy skill → " + tilde(dest))}`);
+        return action;
+    }
+    // stage then swap, so a failed copy never leaves a half-written skill
+    const tmp = `${dest}.tmp-${process.pid}`;
+    fs.rmSync(tmp, { recursive: true, force: true });
+    copyDir(srcDir, tmp);
+    fs.rmSync(dest, { recursive: true, force: true });
+    fs.renameSync(tmp, dest);
+    return action;
+}
+
+function uninstallSkill(dest) {
+    if (isLink(dest)) return removePath(dest);
+    if (!dirExists(dest)) return false;
+    if (!isOurSkillDir(dest)) {
+        notes.push(`${col.warn("⚠")}  ${tilde(dest)} is not a goshipit skill - left untouched.`);
+        return false;
+    }
+    return removePath(dest);
+}
+
+function extensionInstalled(prefix) {
+    return [".vscode", ".vscode-server", ".cursor", ".windsurf"].some(d => {
+        const dir = path.join(home, d, "extensions");
+        try { return fs.readdirSync(dir).some(f => f.startsWith(prefix)); }
+        catch { return false; }
+    });
+}
+
+// ─── platforms ───────────────────────────────────────────────────────────────
+// Skill dirs per tool, from the Agent Skills ecosystem (vercel-labs/skills
+// docs/agents.md). `.agents/skills` is the shared location most tools read.
+
+const PLATFORMS = [
+    {
+        key: "claude", label: "Claude Code",
+        global: ".claude/skills", project: ".claude/skills",
+        detect: () => dirExists(path.join(home, ".claude")) || commandExists("claude"),
+        usage: 'Type /goshipit or say "goshipit" in Claude Code',
+    },
+    {
+        key: "agents", label: "Codex · Cline · Zed",
+        hint: "+ any tool reading ~/.agents/skills",
+        global: ".agents/skills", project: ".agents/skills",
+        detect: () => commandExists("codex") || dirExists(path.join(home, ".codex")) ||
+                      commandExists("zed") || dirExists(path.join(home, ".config", "zed")) ||
+                      (isWin && !!process.env.APPDATA && dirExists(path.join(process.env.APPDATA, "Zed"))) ||
+                      extensionInstalled("saoudrizwan.claude-dev") || dirExists(path.join(home, ".cline")) ||
+                      dirExists(path.join(home, ".agents")),
+        usage: 'Say "goshipit" in Codex CLI, Cline, or Zed Agent',
+    },
+    {
+        key: "cursor", label: "Cursor",
+        global: ".cursor/skills", project: ".agents/skills",
+        detect: () => dirExists(path.join(home, ".cursor")) || commandExists("cursor"),
+        usage: 'Say "goshipit" in Cursor Agent',
+    },
+    {
+        key: "gemini", label: "Gemini CLI",
+        global: ".gemini/skills", project: ".agents/skills",
+        detect: () => dirExists(path.join(home, ".gemini")) || commandExists("gemini"),
+        usage: 'Say "goshipit" in Gemini CLI',
+    },
+    {
+        key: "copilot", label: "GitHub Copilot",
+        global: ".copilot/skills", project: ".agents/skills",
+        detect: () => dirExists(path.join(home, ".copilot")) || extensionInstalled("github.copilot"),
+        usage: 'Say "goshipit" in Copilot agent mode / Copilot CLI',
+    },
+    {
+        key: "windsurf", label: "Windsurf",
+        global: ".codeium/windsurf/skills", project: ".windsurf/skills",
+        detect: () => dirExists(path.join(home, ".codeium", "windsurf")) || commandExists("windsurf"),
+        usage: 'Say "goshipit" in Windsurf Cascade',
+    },
+    {
+        key: "continue", label: "Continue",
+        global: ".continue/skills", project: ".continue/skills",
+        detect: () => dirExists(path.join(home, ".continue")) || commandExists("cn"),
+        usage: 'Say "goshipit" in Continue',
+    },
+    {
+        key: "opencode", label: "OpenCode",
+        global: ".config/opencode/skills", project: ".agents/skills",
+        detect: () => dirExists(path.join(home, ".config", "opencode")) || commandExists("opencode"),
+        usage: 'Say "goshipit" in OpenCode',
+    },
+];
+
+function skillDest(p) {
+    return path.join(scopeRoot, ...(isProject ? p.project : p.global).split("/"), SKILL_NAME);
+}
+
+function installedAt(p) { return fileExists(path.join(skillDest(p), "SKILL.md")); }
+
+// ─── legacy cleanup (v0.1.x pointer adapters) ────────────────────────────────
+// Before v0.2.0 goshipit wrote rule/prompt files and settings.json entries per
+// tool. Those are removed on install and uninstall. Only exact files we
+// created, or text byte-identical to what we shipped, are touched.
+
+const MARK_START = "<!-- goshipit:start -->";
+const MARK_END   = "<!-- goshipit:end -->";
+const LEGACY = {
+    gemini:  ["403944d9eac426cb", "989a0ed5b6ab5013"],  // raw GEMINI.md tail
+    cline:   ["c1c3933c2926d824", "f659638fb213266d"],  // raw settings string
+    copilot: ["406bf0ef99208bbf", "4c5e5bbbc7be31f4"],  // trimmed settings text
+};
+const LEGACY_HEADING = "# goshipit — Pre-launch Codebase Audit";
+const CLINE_KEY      = "cline.customInstructions";
+const COPILOT_KEY    = "github.copilot.chat.codeGeneration.instructions";
+
+function hasBlock(text) {
+    return typeof text === "string" && text.includes(MARK_START) && text.includes(MARK_END);
+}
+
+function removeBlock(text) {
+    if (!hasBlock(text)) return text;
+    let s = text.indexOf(MARK_START);
+    let e = text.indexOf(MARK_END, s);
+    if (e < 0) return text;
+    e += MARK_END.length;
+    if (text[e] === "\n") e++;
+    if (s >= 2 && text.slice(s - 2, s) === "\n\n") s -= 2;
+    return text.slice(0, s) + text.slice(e);
+}
+
+function stripLegacyGemini(text) {
+    const idx = text.lastIndexOf(LEGACY_HEADING);
+    if (idx < 0 || !LEGACY.gemini.includes(shortHash(text.slice(idx)))) return text;
+    let s = idx;
+    if (s >= 2 && text.slice(s - 2, s) === "\n\n") s -= 2;
+    return text.slice(0, s);
+}
+
+// Strip comments + trailing commas outside strings. Returns { json, hasComments }.
+function stripJsonc(src) {
+    let out = "", hasComments = false, i = 0;
+    const n = src.length;
+    while (i < n) {
+        const ch = src[i];
+        if (ch === '"') {
+            let j = i + 1;
+            while (j < n && src[j] !== '"') j += src[j] === "\\" ? 2 : 1;
+            out += src.slice(i, j + 1);
+            i = j + 1;
+        } else if (ch === "/" && src[i + 1] === "/") {
+            hasComments = true;
+            while (i < n && src[i] !== "\n") i++;
+        } else if (ch === "/" && src[i + 1] === "*") {
+            hasComments = true;
+            const end = src.indexOf("*/", i + 2);
+            i = end < 0 ? n : end + 2;
+            out += " ";
+        } else { out += ch; i++; }
+    }
+    let res = "";
+    for (let k = 0; k < out.length; k++) {
+        const ch = out[k];
+        if (ch === '"') {
+            let j = k + 1;
+            while (j < out.length && out[j] !== '"') j += out[j] === "\\" ? 2 : 1;
+            res += out.slice(k, j + 1);
+            k = j;
+        } else if (ch === ",") {
+            let j = k + 1;
+            while (j < out.length && /\s/.test(out[j])) j++;
+            if (out[j] !== "}" && out[j] !== "]") res += ch;
+        } else res += ch;
+    }
+    return { json: res, hasComments };
+}
 
 function vsCodeSettingsPaths() {
-    const candidates = [];
-    if (isWin) {
-        if (process.env.APPDATA) {
-            candidates.push(path.join(process.env.APPDATA, "Code", "User", "settings.json"));
-            candidates.push(path.join(process.env.APPDATA, "Cursor", "User", "settings.json"));
-        }
-    } else if (process.platform === "darwin") {
-        const base = path.join(home, "Library", "Application Support");
-        candidates.push(path.join(base, "Code", "User", "settings.json"));
-        candidates.push(path.join(base, "Cursor", "User", "settings.json"));
-    } else {
-        candidates.push(path.join(home, ".config", "Code", "User", "settings.json"));
-        candidates.push(path.join(home, ".config", "Cursor", "User", "settings.json"));
-    }
-    return candidates.filter(p => fileExists(p));
+    const apps = ["Code", "Cursor", "Windsurf"];
+    let base;
+    if (isWin) base = process.env.APPDATA || "";
+    else if (process.platform === "darwin") base = path.join(home, "Library", "Application Support");
+    else base = path.join(home, ".config");
+    return base ? apps.map(a => path.join(base, a, "User", "settings.json")).filter(fileExists) : [];
 }
 
-function readVSCodeSettings(settingsPath) {
+function readSettings(p) {
+    const raw = readText(p);
+    if (raw === null || raw.trim() === "") return null;
     try {
-        const raw = fs.readFileSync(settingsPath, "utf8");
-        // Strip single-line comments so JSON.parse works on JSONC
-        const stripped = raw.replace(/^\s*\/\/.*$/gm, "").replace(/,\s*([\]}])/g, "$1");
-        return JSON.parse(stripped);
+        const { json, hasComments } = stripJsonc(raw);
+        const obj = JSON.parse(json);
+        if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
+        return { obj, raw, hasComments };
     } catch { return null; }
 }
 
-function writeVSCodeSettings(settingsPath, obj) {
-    if (isDryRun) {
-        console.log(`  ${col.dim("[dry-run] would update " + settingsPath)}`);
-        return true;
-    }
-    try {
-        fs.writeFileSync(settingsPath, JSON.stringify(obj, null, 4), "utf8");
-        return true;
-    } catch { return false; }
+function writeSettings(p, s) {
+    const m = s.raw.match(/^([ \t]+)"/m);
+    const out = JSON.stringify(s.obj, null, m ? m[1] : 4) + (s.raw.endsWith("\n") ? "\n" : "");
+    if (out !== s.raw) writeText(p, out);
 }
 
-function getCopilotInstruction() {
-    try { return fs.readFileSync(path.join(srcAdapters, "copilot.md"), "utf8").trim(); }
-    catch { return "When asked to 'goshipit' or 'is my app ready?': run the goshipit pre-launch audit. Read ~/.goshipit/references/ for check definitions. NEVER read .env*, .pem, .key, id_rsa, credentials.json."; }
+function clineIsOurs(v) {
+    return typeof v === "string" && (hasBlock(v) || LEGACY.cline.includes(shortHash(v)));
 }
 
-function installCopilotToSettings() {
-    const paths = vsCodeSettingsPaths();
-    if (paths.length === 0) return null;
-    const results = [];
-    for (const p of paths) {
-        const settings = readVSCodeSettings(p) || {};
-        const existing = settings["github.copilot.chat.codeGeneration.instructions"] || [];
-        const alreadySet = existing.some(i => i.text && i.text.includes("goshipit"));
-        if (!alreadySet) {
-            settings["github.copilot.chat.codeGeneration.instructions"] = [
-                ...existing,
-                { text: getCopilotInstruction() },
-            ];
-            writeVSCodeSettings(p, settings);
-        }
-        results.push(p);
-    }
-    return results;
+function copilotIsOurs(item) {
+    const t = item && typeof item.text === "string" ? item.text : null;
+    return !!t && (hasBlock(t) || LEGACY.copilot.includes(shortHash(t.trim())));
 }
 
-function uninstallCopilotFromSettings() {
+// Clean ours out of VS Code-family settings.json. Never rewrites a file with comments.
+function cleanLegacySettings() {
+    const done = [];
     for (const p of vsCodeSettingsPaths()) {
-        const settings = readVSCodeSettings(p);
-        if (!settings) continue;
-        const key = "github.copilot.chat.codeGeneration.instructions";
-        if (Array.isArray(settings[key])) {
-            settings[key] = settings[key].filter(i => !(i.text && i.text.includes("goshipit")));
-            if (settings[key].length === 0) delete settings[key];
-            writeVSCodeSettings(p, settings);
+        const s = readSettings(p);
+        if (!s) continue;
+        const cline   = clineIsOurs(s.obj[CLINE_KEY]);
+        const copilot = Array.isArray(s.obj[COPILOT_KEY]) && s.obj[COPILOT_KEY].some(copilotIsOurs);
+        if (!cline && !copilot) continue;
+        if (s.hasComments) {
+            notes.push(`${col.warn("⚠")}  ${tilde(p)} has comments - remove the old goshipit entries` +
+                       ` from "${CLINE_KEY}" / "${COPILOT_KEY}" manually.`);
+            continue;
         }
+        if (cline) {
+            const cur  = s.obj[CLINE_KEY];
+            const next = hasBlock(cur) ? removeBlock(cur) : "";
+            if (next.trim() === "") delete s.obj[CLINE_KEY];
+            else s.obj[CLINE_KEY] = next;
+        }
+        if (copilot) {
+            const kept = s.obj[COPILOT_KEY].filter(i => !copilotIsOurs(i));
+            if (kept.length) s.obj[COPILOT_KEY] = kept;
+            else delete s.obj[COPILOT_KEY];
+        }
+        writeSettings(p, s);
+        done.push(p);
     }
+    return done;
 }
 
-function installClineToSettings() {
-    const paths = vsCodeSettingsPaths();
-    if (paths.length === 0) return null;
-    const instructions = fs.readFileSync(path.join(srcAdapters, "cline.md"), "utf8");
-    const results = [];
-    for (const p of paths) {
-        const settings = readVSCodeSettings(p) || {};
-        if (!settings["cline.customInstructions"] || !settings["cline.customInstructions"].includes("goshipit")) {
-            settings["cline.customInstructions"] = instructions;
-            writeVSCodeSettings(p, settings);
-        }
-        results.push(p);
-    }
-    return results;
+// Remove our marker block from a text file; delete the file if it becomes empty.
+function cleanBlockFile(p, deleteIfEmpty) {
+    const t = readText(p);
+    if (t === null) return false;
+    let next = removeBlock(t).replace(/\n\n<!-- goshipit: see [^\n]+ -->\n/g, "");
+    if (path.basename(p) === "GEMINI.md") next = stripLegacyGemini(next);
+    if (next === t) return false;
+    if (deleteIfEmpty && next.trim() === "") return removePath(p);
+    writeText(p, next);
+    return true;
 }
 
-function uninstallClineFromSettings() {
-    for (const p of vsCodeSettingsPaths()) {
-        const settings = readVSCodeSettings(p);
-        if (!settings) continue;
-        if (settings["cline.customInstructions"] && settings["cline.customInstructions"].includes("goshipit")) {
-            delete settings["cline.customInstructions"];
-            writeVSCodeSettings(p, settings);
-        }
-    }
+// Delete a file only if it is clearly a goshipit pointer we wrote.
+function cleanOwnedFile(p) {
+    const t = readText(p);
+    return t !== null && t.includes("goshipit") && removePath(p);
 }
 
-function hasClineExtension() {
-    const parents = [
-        path.join(home, ".vscode", "extensions"),
-        path.join(home, ".cursor", "extensions"),
-        path.join(home, ".vscode-server", "extensions"),
-    ];
-    for (const dir of parents) {
-        if (!dirExists(dir)) continue;
-        try { if (fs.readdirSync(dir).some(f => f.startsWith("saoudrizwan.claude-dev"))) return true; }
-        catch {}
-    }
-    return false;
+function cleanLegacy() {
+    const cwd = process.cwd();
+    const zedPrompts = isWin && process.env.APPDATA
+        ? path.join(process.env.APPDATA, "Zed", "prompts")
+        : path.join(home, ".config", "zed", "prompts");
+    const removed = [];
+    const track = (ok, p) => { if (ok) removed.push(p); };
+
+    // shared runbook dir from the pointer era
+    const shared = path.join(home, ".goshipit");
+    if (fileExists(path.join(shared, "SKILL.md"))) track(removePath(shared), shared);
+
+    for (const p of [
+        path.join(home, ".cursor", "rules", "goshipit.mdc"),
+        path.join(cwd, ".cursor", "rules", "goshipit.mdc"),
+        path.join(home, ".codeium", "windsurf", "memories", "goshipit.md"),
+        path.join(home, ".codex", "goshipit.md"),
+        path.join(zedPrompts, "goshipit.md"),
+        path.join(home, ".cline", "goshipit.md"),
+        path.join(home, ".continue", "prompts", "goshipit.prompt"),
+    ]) track(cleanOwnedFile(p), p);
+
+    for (const [p, del] of [
+        [path.join(home, ".codex", "AGENTS.md"), true],
+        [path.join(cwd, "AGENTS.md"), false],
+        [path.join(home, ".gemini", "GEMINI.md"), true],
+        [path.join(cwd, ".github", "copilot-instructions.md"), true],
+    ]) track(cleanBlockFile(p, del), p);
+
+    for (const p of cleanLegacySettings()) removed.push(p);
+    return removed;
 }
+
+// ─── misc ────────────────────────────────────────────────────────────────────
 
 function askLine(iface, question) {
     return new Promise(resolve => iface.question(question, resolve));
 }
 
 function parseSelection(input, max) {
-    const t = input.trim().toLowerCase();
-    if (!t || t === "all" || t === "a") return Array.from({ length: max }, (_, i) => i);
     return [...new Set(
-        t.split(/[\s,]+/)
-         .map(n => parseInt(n, 10) - 1)
-         .filter(n => !isNaN(n) && n >= 0 && n < max)
+        input.split(/[\s,]+/)
+             .map(n => parseInt(n, 10) - 1)
+             .filter(n => !isNaN(n) && n >= 0 && n < max)
     )];
+}
+
+function isNewer(a, b) {
+    const pa = String(a).split(".").map(n => parseInt(n, 10) || 0);
+    const pb = String(b).split(".").map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+    return false;
 }
 
 function fetchLatestVersion() {
@@ -256,308 +448,71 @@ function fetchLatestVersion() {
     });
 }
 
-function stripGoshipitComment(filePath) {
-    if (!fs.existsSync(filePath)) return;
-    const content = fs.readFileSync(filePath, "utf8");
-    const cleaned = content.replace(/\n\n<!-- goshipit: see [^\n]+ -->\n/g, "");
-    if (cleaned !== content && !isDryRun) fs.writeFileSync(filePath, cleaned, "utf8");
-}
-
-// ─── platform path resolution (Windows-aware) ────────────────────────────────
-
-function zedPromptsDir() {
-    if (isWin && process.env.APPDATA) return path.join(process.env.APPDATA, "Zed", "prompts");
-    return path.join(home, ".config", "zed", "prompts");
-}
-
-function zedDetect() {
-    if (isWin) return commandExists("zed") || (process.env.APPDATA && dirExists(path.join(process.env.APPDATA, "Zed")));
-    return commandExists("zed") || dirExists(path.join(home, ".config", "zed"));
-}
-
-// ─── platform definitions ────────────────────────────────────────────────────
-
-const PLATFORMS = [
-    {
-        key: "claude",
-        label: "Claude Code",
-        detect:      () => dirExists(path.join(home, ".claude")) || commandExists("claude"),
-        installedAt: () => fileExists(path.join(home, ".claude", "skills", "goshipit", "SKILL.md")),
-        install() {
-            const skillDir = path.join(home, ".claude", "skills", "goshipit");
-            ensureDir(skillDir);
-            copyFile(srcSkill, path.join(skillDir, "SKILL.md"));
-            copyDir(srcRefs, path.join(skillDir, "references"));
-            return path.join(skillDir, "SKILL.md");
-        },
-        verify:        () => verifyFile(path.join(home, ".claude", "skills", "goshipit", "SKILL.md")),
-        uninstallPaths: [path.join(home, ".claude", "skills", "goshipit")],
-        usage: 'Say "goshipit" or "is my app ready?" in Claude Code',
-    },
-    {
-        key: "cursor",
-        label: "Cursor",
-        detect:      () => dirExists(path.join(home, ".cursor")) || commandExists("cursor"),
-        installedAt: () => fileExists(path.join(home, ".cursor", "rules", "goshipit.mdc")),
-        install() {
-            const globalDest = path.join(home, ".cursor", "rules", "goshipit.mdc");
-            copyFile(path.join(srcAdapters, "cursor.mdc"), globalDest);
-            // Also install project-level rules if inside a project with .cursor/rules/
-            const projectRulesDir = path.join(process.cwd(), ".cursor", "rules");
-            if (dirExists(path.join(process.cwd(), ".cursor")) || dirExists(projectRulesDir)) {
-                const projDest = path.join(projectRulesDir, "goshipit.mdc");
-                copyFile(path.join(srcAdapters, "cursor.mdc"), projDest);
-            }
-            return globalDest;
-        },
-        verify:        () => verifyFile(path.join(home, ".cursor", "rules", "goshipit.mdc")),
-        uninstallPaths: [
-            path.join(home, ".cursor", "rules", "goshipit.mdc"),
-            path.join(process.cwd(), ".cursor", "rules", "goshipit.mdc"),
-        ],
-        usage: 'Say "goshipit" or "is my app ready?" in Cursor Agent',
-    },
-    {
-        key: "windsurf",
-        label: "Windsurf",
-        detect:      () => dirExists(path.join(home, ".codeium")) || commandExists("windsurf"),
-        installedAt: () => fileExists(path.join(home, ".codeium", "windsurf", "memories", "goshipit.md")),
-        install() {
-            const dest = path.join(home, ".codeium", "windsurf", "memories", "goshipit.md");
-            copyFile(path.join(srcAdapters, "windsurf.md"), dest);
-            return dest;
-        },
-        verify:        () => verifyFile(path.join(home, ".codeium", "windsurf", "memories", "goshipit.md")),
-        uninstallPaths: [path.join(home, ".codeium", "windsurf", "memories", "goshipit.md")],
-        usage: 'Say "goshipit" or "is my app ready?" in Windsurf Cascade',
-    },
-    {
-        key: "codex",
-        label: "OpenAI Codex CLI",
-        detect:      () => commandExists("codex") || dirExists(path.join(home, ".codex")),
-        installedAt: () => fileExists(path.join(home, ".codex", "goshipit.md")),
-        install() {
-            const dest = path.join(home, ".codex", "goshipit.md");
-            copyFile(path.join(srcAdapters, "codex.md"), dest);
-            if (!isDryRun) {
-                const agentsMd = path.join(process.cwd(), "AGENTS.md");
-                if (fs.existsSync(agentsMd)) {
-                    const content = fs.readFileSync(agentsMd, "utf8");
-                    if (!content.includes("goshipit")) {
-                        fs.appendFileSync(agentsMd, "\n\n<!-- goshipit: see ~/.codex/goshipit.md -->\n");
-                    }
-                }
-            }
-            return dest;
-        },
-        verify: () => verifyFile(path.join(home, ".codex", "goshipit.md")),
-        uninstallPaths: [path.join(home, ".codex", "goshipit.md")],
-        uninstallHook() {
-            // Clean up AGENTS.md comment
-            const agentsMd = path.join(process.cwd(), "AGENTS.md");
-            stripGoshipitComment(agentsMd);
-        },
-        usage: 'Say "goshipit" or "is my app ready?" in Codex CLI',
-    },
-    {
-        key: "gemini",
-        label: "Gemini CLI",
-        detect:      () => commandExists("gemini") || dirExists(path.join(home, ".gemini")),
-        installedAt: () => {
-            const geminiMd = path.join(home, ".gemini", "GEMINI.md");
-            return fileExists(geminiMd) && fs.readFileSync(geminiMd, "utf8").includes("goshipit");
-        },
-        install() {
-            const geminiMd = path.join(home, ".gemini", "GEMINI.md");
-            fs.mkdirSync(path.dirname(geminiMd), { recursive: true });
-            if (!isDryRun) {
-                const content = fs.readFileSync(path.join(srcAdapters, "gemini.md"), "utf8");
-                if (fileExists(geminiMd)) {
-                    const existing = fs.readFileSync(geminiMd, "utf8");
-                    if (!existing.includes("goshipit"))
-                        fs.appendFileSync(geminiMd, "\n\n" + content);
-                } else {
-                    fs.writeFileSync(geminiMd, content, "utf8");
-                }
-            }
-            return geminiMd;
-        },
-        verify: () => {
-            const geminiMd = path.join(home, ".gemini", "GEMINI.md");
-            return fileExists(geminiMd) && fs.readFileSync(geminiMd, "utf8").includes("goshipit");
-        },
-        uninstallPaths: [],
-        uninstallHook() {
-            const geminiMd = path.join(home, ".gemini", "GEMINI.md");
-            if (!fileExists(geminiMd)) return;
-            const content = fs.readFileSync(geminiMd, "utf8");
-            const stripped = content.replace(/\n\n[\s\S]*?goshipit[\s\S]*?(?=\n\n|$)/g, "").trim();
-            if (stripped === "") {
-                fs.unlinkSync(geminiMd);
-            } else {
-                fs.writeFileSync(geminiMd, stripped + "\n", "utf8");
-            }
-        },
-        usage: 'Say "goshipit" or "is my app ready?" in Gemini CLI',
-    },
-    {
-        key: "zed",
-        label: "Zed",
-        detect:      zedDetect,
-        installedAt: () => fileExists(path.join(zedPromptsDir(), "goshipit.md")),
-        install() {
-            const dest = path.join(zedPromptsDir(), "goshipit.md");
-            copyFile(path.join(srcAdapters, "zed.md"), dest);
-            return dest;
-        },
-        verify:        () => verifyFile(path.join(zedPromptsDir(), "goshipit.md")),
-        uninstallPaths: [path.join(zedPromptsDir(), "goshipit.md")],
-        usage: 'Say "goshipit" or "is my app ready?" in Zed Agent',
-    },
-    {
-        key: "cline",
-        label: "Cline",
-        detect: hasClineExtension,
-        installedAt: () => vsCodeSettingsPaths().some(p => {
-            const s = readVSCodeSettings(p);
-            return s && s["cline.customInstructions"] && s["cline.customInstructions"].includes("goshipit");
-        }),
-        install() {
-            const updated = installClineToSettings();
-            if (!updated || updated.length === 0) {
-                const dest = path.join(home, ".cline", "goshipit.md");
-                copyFile(path.join(srcAdapters, "cline.md"), dest);
-                return dest + " (VS Code settings.json not found — paste file contents into Cline → Settings → Custom Instructions)";
-            }
-            return updated.join(", ");
-        },
-        verify: () => vsCodeSettingsPaths().some(p => {
-            const s = readVSCodeSettings(p);
-            return s && s["cline.customInstructions"] && s["cline.customInstructions"].includes("goshipit");
-        }),
-        uninstallPaths: [path.join(home, ".cline", "goshipit.md")],
-        uninstallHook: uninstallClineFromSettings,
-        usage: 'Say "goshipit" or "is my app ready?" in Cline (global)',
-    },
-    {
-        key: "copilot",
-        label: "GitHub Copilot",
-        detect: () => {
-            const extParents = [
-                path.join(home, ".vscode", "extensions"),
-                path.join(home, ".vscode-server", "extensions"),
-                path.join(home, ".cursor", "extensions"),
-            ];
-            return extParents.some(dir => {
-                if (!dirExists(dir)) return false;
-                try { return fs.readdirSync(dir).some(f => f.startsWith("github.copilot")); }
-                catch { return false; }
-            });
-        },
-        installedAt: () => vsCodeSettingsPaths().some(p => {
-            const s = readVSCodeSettings(p);
-            const arr = s && s["github.copilot.chat.codeGeneration.instructions"];
-            return Array.isArray(arr) && arr.some(i => i.text && i.text.includes("goshipit"));
-        }),
-        install() {
-            const updated = installCopilotToSettings();
-            if (!updated || updated.length === 0) {
-                const dest = path.join(process.cwd(), ".github", "copilot-instructions.md");
-                fs.mkdirSync(path.dirname(dest), { recursive: true });
-                if (!isDryRun && fs.existsSync(dest)) {
-                    const existing = fs.readFileSync(dest, "utf8");
-                    if (!existing.includes("goshipit"))
-                        fs.appendFileSync(dest, "\n\n" + fs.readFileSync(path.join(srcAdapters, "copilot.md"), "utf8"));
-                } else {
-                    copyFile(path.join(srcAdapters, "copilot.md"), dest);
-                }
-                return dest + " (project-level fallback — VS Code settings.json not found)";
-            }
-            return updated.join(", ");
-        },
-        verify: () => vsCodeSettingsPaths().some(p => {
-            const s = readVSCodeSettings(p);
-            const arr = s && s["github.copilot.chat.codeGeneration.instructions"];
-            return Array.isArray(arr) && arr.some(i => i.text && i.text.includes("goshipit"));
-        }),
-        uninstallPaths: [],
-        uninstallHook: uninstallCopilotFromSettings,
-        usage: 'Say "goshipit" or "is my app ready?" in GitHub Copilot Chat (global — all projects)',
-    },
-    {
-        key: "continue",
-        label: "Continue.dev",
-        detect: () => dirExists(path.join(home, ".continue")) || commandExists("continue"),
-        installedAt: () => fileExists(path.join(home, ".continue", "prompts", "goshipit.prompt")),
-        install() {
-            const dest = path.join(home, ".continue", "prompts", "goshipit.prompt");
-            copyFile(path.join(srcAdapters, "continue.prompt"), dest);
-            return dest;
-        },
-        verify:        () => verifyFile(path.join(home, ".continue", "prompts", "goshipit.prompt")),
-        uninstallPaths: [path.join(home, ".continue", "prompts", "goshipit.prompt")],
-        usage: 'Type /goshipit in Continue.dev chat, or say "is my app ready?"',
-    },
-    {
-        key: "opencode",
-        label: "OpenCode",
-        detect: () => dirExists(path.join(home, ".config", "opencode")) || dirExists(path.join(home, ".opencode")) || commandExists("opencode"),
-        installedAt: () => fileExists(path.join(home, ".config", "opencode", "skills", "goshipit", "SKILL.md")) || fileExists(path.join(home, ".opencode", "skills", "goshipit", "SKILL.md")),
-        install() {
-            // global: ~/.config/opencode/skills/goshipit (always)
-            const skillDir = path.join(home, ".config", "opencode", "skills", "goshipit");
-            ensureDir(skillDir);
-            copyFile(srcSkill, path.join(skillDir, "SKILL.md"));
-            copyDir(srcRefs, path.join(skillDir, "references"));
-            copyFile(path.join(srcAdapters, "opencode.md"), path.join(skillDir, "opencode.md"));
-            return path.join(skillDir, "SKILL.md");
-        },
-        verify:        () => verifyFile(path.join(home, ".config", "opencode", "skills", "goshipit", "SKILL.md")),
-        uninstallPaths: [path.join(home, ".config", "opencode", "skills", "goshipit")],
-        usage: 'Say "goshipit" or "is my app ready?" in OpenCode TUI',
-    },
-];
-
-// ─── shared refs install ─────────────────────────────────────────────────────
-
-function installSharedRefs() {
-    ensureDir(sharedRefs);
-    copyDir(srcRefs, sharedRefs);
-}
-
-// ─── pad with color (avoids ANSI code length messing padEnd) ─────────────────
-
 function padCol(raw, len, colorFn) {
     return colorFn(raw) + " ".repeat(Math.max(0, len - raw.length));
+}
+
+function printNotes() {
+    if (notes.length === 0) return;
+    console.log(`\n  Manual steps:`);
+    for (const n of notes) console.log(`    ${n}`);
+}
+
+// Unique destinations for a platform list (several tools share .agents/skills).
+function groupByDest(list) {
+    const map = new Map();
+    for (const p of list) {
+        const d = skillDest(p);
+        if (!map.has(d)) map.set(d, []);
+        map.get(d).push(p);
+    }
+    return map;
+}
+
+// ─── init (delegates to scripts/config.js) ───────────────────────────────────
+
+function runInit() {
+    if (!fileExists(srcConfigJs)) {
+        console.error(col.err("\nError: skills/goshipit/scripts/config.js not found in package. Reinstall: npx goshipit@latest"));
+        process.exit(1);
+    }
+    try {
+        execFileSync(process.execPath, [srcConfigJs, "init", ...args.slice(1)], { stdio: "inherit" });
+    } catch (e) {
+        process.exit(typeof e.status === "number" ? e.status : 1);
+    }
 }
 
 // ─── --help ──────────────────────────────────────────────────────────────────
 
 function showHelp() {
-    const platforms = PLATFORMS.map(p => p.key).join(",");
     console.log(`
-  ${col.bold("goshipit")} ${col.cyan("v" + VERSION)} — Pre-launch codebase audit for AI coding tools
-
-  ${col.bold("Usage:")}
-    npx goshipit [flags]
+  ${col.bold("goshipit")} ${col.cyan("v" + VERSION)} — Pre-launch codebase audit skill (Agent Skills format)
 
   ${col.bold("Install / Uninstall:")}
-    ${col.cyan("npx goshipit")}                     interactive picker — choose which AI tools to install
-    ${col.cyan("npx goshipit --uninstall")}          interactive picker — choose which to remove
-    ${col.cyan("npx goshipit -y")}                   skip picker, install all detected tools
-    ${col.cyan("npx goshipit --uninstall -y")}       skip picker, remove all installed tools
-    ${col.cyan("npx goshipit --dry-run")}            preview what would install/remove, touch nothing
-    ${col.cyan("npx goshipit@latest")}               update to latest version
+    ${col.cyan("npx goshipit")}                     pick AI tools, install the skill globally (~)
+    ${col.cyan("npx goshipit -y")}                  install to every detected tool, no prompt
+    ${col.cyan("npx goshipit --project")}           install into this repo (.agents/skills, .claude/skills, ...)
+    ${col.cyan("npx goshipit --uninstall")}         pick AI tools to remove it from
+    ${col.cyan("npx goshipit --uninstall -y")}      remove from every tool it is installed in
+    ${col.cyan("npx goshipit --dry-run")}           preview, touch nothing
+    ${col.cyan("npx goshipit@latest")}              update
+
+  ${col.bold("Also works with:")}
+    ${col.cyan("npx skills add Capta1nRaj/goshipit")}   (vercel-labs/skills CLI)
+
+  ${col.bold("Project config:")}
+    ${col.cyan("npx goshipit init")}                create goshipit.md (check list) in the current dir
+    ${col.cyan("npx goshipit init --force")}        overwrite an existing goshipit.md
+    ${col.cyan("npx goshipit init --dir <path>")}   create it in another project dir
+    ${col.cyan("npx goshipit init --off K,L,M")}    start with those sections unticked
 
   ${col.bold("Info:")}
-    ${col.cyan("npx goshipit --status")}             show detected + installed status per platform
-    ${col.cyan("npx goshipit --version")}            show local version and check npm for updates
-    ${col.cyan("npx goshipit --help")}               show this help
+    ${col.cyan("npx goshipit --status")}            detected + installed per tool, with paths
+    ${col.cyan("npx goshipit --version")}           local version + npm latest
 
-  ${col.bold("Supported platforms:")}
-    ${platforms}
-
-  ${col.bold("Repo:")} https://github.com/Capta1nRaj/goshipit
+  ${col.bold("Tools:")} ${PLATFORMS.map(p => p.label).join(", ")}
+  ${col.bold("Repo:")}  https://github.com/Capta1nRaj/goshipit
 `);
 }
 
@@ -567,221 +522,171 @@ async function showVersion() {
     console.log(`\n  ${col.bold("goshipit")} ${col.cyan("v" + VERSION)} (local)\n`);
     process.stdout.write(`  Checking npm for latest version...`);
     const latest = await fetchLatestVersion();
-    if (latest) {
-        if (latest === VERSION) {
-            process.stdout.write(`  ${col.ok("✓ up to date")}\n`);
-        } else {
-            process.stdout.write(`\r  ${col.warn("↑ v" + latest + " available")} — run ${col.cyan("npx goshipit@latest")} to update\n`);
-        }
-    } else {
-        process.stdout.write(`\r  ${col.dim("(could not reach npm)")}\n`);
-    }
-
-    console.log(`\n  Installed on:`);
-    for (const p of PLATFORMS) {
-        const installed = p.installedAt();
-        const icon = installed ? col.ok("✅") : col.dim("⚪");
-        const note = installed ? col.dim("v" + VERSION) : col.dim("not installed");
-        console.log(`    ${icon} ${p.label.padEnd(18)} ${note}`);
-    }
+    if (!latest)                     process.stdout.write(`\r  ${col.dim("(could not reach npm)")}${" ".repeat(20)}\n`);
+    else if (isNewer(latest, VERSION)) process.stdout.write(`\r  ${col.warn("↑ v" + latest + " available")} — run ${col.cyan("npx goshipit@latest")}\n`);
+    else                             process.stdout.write(`  ${col.ok("✓ up to date")}\n`);
     console.log();
 }
 
 // ─── --status ────────────────────────────────────────────────────────────────
 
 function showStatus() {
-    console.log(`\n  ${col.bold("goshipit")} ${col.cyan("v" + VERSION)} — status\n`);
-    console.log(`  ${"Platform".padEnd(20)} ${"Detected".padEnd(10)} ${"Installed".padEnd(6)}  Path`);
-    console.log(`  ${"─".repeat(72)}`);
+    console.log(`\n  ${col.bold("goshipit")} ${col.cyan("v" + VERSION)} — status (${scopeLabel})\n`);
+    console.log(`  ${"Tool".padEnd(22)} ${"Detected".padEnd(9)} ${"Installed".padEnd(10)} Path`);
+    console.log(`  ${"─".repeat(76)}`);
     for (const p of PLATFORMS) {
-        const detected   = p.detect();
-        const installed  = p.installedAt();
-        const dRaw = detected  ? "yes" : "no";
-        const iRaw = installed ? "yes" : "no";
-        const installPath = installed
-            ? (p.uninstallPaths && p.uninstallPaths[0]
-                ? p.uninstallPaths[0].replace(home, "~")
-                : "settings.json")
-            : "";
+        const detected = p.detect();
+        const dest = skillDest(p);
+        const v = skillVersionAt(dest);
+        const iRaw = v ? "v" + v : "no";
         console.log(
-            `  ${p.label.padEnd(20)} ` +
-            `${padCol(dRaw, 10, detected  ? col.ok : col.dim)} ` +
-            `${padCol(iRaw, 6,  installed ? col.ok : col.dim)}  ` +
-            `${installed ? col.dim(installPath) : ""}`
+            `  ${p.label.padEnd(22)} ` +
+            `${padCol(detected ? "yes" : "no", 9, detected ? col.ok : col.dim)} ` +
+            `${padCol(iRaw, 10, !v ? col.dim : v === VERSION ? col.ok : col.warn)} ` +
+            `${col.dim(tilde(dest))}`
         );
     }
-    const sharedOk = dirExists(sharedRefs);
-    console.log(`\n  Shared refs: ${sharedOk ? col.ok("✅ " + sharedRefs) : col.dim("not found")}\n`);
+    console.log();
 }
 
 // ─── interactive picker ──────────────────────────────────────────────────────
 
 async function pickPlatforms(mode) {
     const uninstallMode = mode === "uninstall";
+    const rows = PLATFORMS.map((p, i) => ({
+        index: i + 1, platform: p,
+        detected: p.detect(), installed: installedAt(p),
+    }));
 
-    const rows = PLATFORMS.map((p, i) => {
-        const detected  = p.detect();
-        const installed = p.installedAt();
+    console.log(`\n  ${col.bold("🚀 goshipit")} ${col.cyan("v" + VERSION)} — ${uninstallMode ? "uninstall" : "install"} (${scopeLabel})\n`);
+    for (const r of rows) {
         const badge = uninstallMode
-            ? (installed ? col.ok("🗑️  installed")       : col.dim("⚪ not installed"))
-            : (detected  ? col.ok("✅ detected")         : col.dim("⚪ not detected"));
-        return { index: i + 1, platform: p, detected, installed, badge };
-    });
-
-    console.log(`
-  ${col.bold("╔══════════════════════════════════════════════════════╗")}
-  ${col.bold("║")}          🚀  ${col.cyan("goshipit")} — Pre-launch Audit             ${col.bold("║")}
-  ${col.bold("╚══════════════════════════════════════════════════════╝")}
-`);
-    console.log(uninstallMode
-        ? `  ${col.bold("Select AI tools to uninstall:")}\n`
-        : `  ${col.bold("Select AI tools to install:")}\n`);
-
-    for (const row of rows) {
-        console.log(`    [${row.index}] ${row.platform.label.padEnd(18)} ${row.badge}`);
+            ? (r.installed ? col.ok("installed") : col.dim("not installed"))
+            : (r.detected  ? col.ok("detected")  : col.dim("not detected"));
+        const hint = r.platform.hint ? " " + col.dim(r.platform.hint) : "";
+        console.log(`    [${r.index}] ${r.platform.label.padEnd(22)} ${badge}${hint}`);
     }
 
-    const hint = uninstallMode
-        ? `\n  Numbers (e.g. "1,3"), "all", or ${col.dim("Enter")} for installed only: `
-        : `\n  Numbers (e.g. "1,3"), "all", or ${col.dim("Enter")} for detected only: `;
+    const pickDefault = () => rows.filter(r => uninstallMode ? r.installed : r.detected).map(r => r.platform);
+    const what = uninstallMode ? "installed" : "detected";
+    const prompt = `\n  Numbers (e.g. "1,3"), "all", or ${col.dim("Enter")} for ${what}: `;
 
-    if (isYes || !isTTY) {
-        const autoLabel = uninstallMode ? "(auto: installed only)" : "(auto: detected only)";
-        console.log(`${hint}${col.dim(autoLabel)}`);
-        return rows.filter(r => uninstallMode ? r.installed : r.detected).map(r => r.platform);
+    if (isYes || !process.stdin.isTTY) {
+        console.log(`${prompt}${col.dim("(auto: " + what + ")")}`);
+        return pickDefault();
     }
 
     const iface = rl.createInterface({ input: process.stdin, output: process.stdout });
-    const input = await askLine(iface, hint);
+    const input = (await askLine(iface, prompt)).trim().toLowerCase();
     iface.close();
 
-    const t = input.trim().toLowerCase();
-    if (!t) {
-        return rows.filter(r => uninstallMode ? r.installed : r.detected).map(r => r.platform);
-    } else if (t === "all" || t === "a") {
-        return PLATFORMS;
-    } else {
-        const indices = parseSelection(t, PLATFORMS.length);
-        return indices.map(i => PLATFORMS[i]);
-    }
+    if (!input) return pickDefault();
+    if (input === "all" || input === "a") return PLATFORMS;
+    return parseSelection(input, PLATFORMS.length).map(i => PLATFORMS[i]);
 }
 
 // ─── run install ─────────────────────────────────────────────────────────────
 
 async function runInstall(selected) {
-    if (!fs.existsSync(srcSkill)) {
-        console.error(col.err("\nError: SKILL.md not found. Reinstall: npm install -g goshipit"));
+    if (!fileExists(srcSkill)) {
+        console.error(col.err("\nError: skills/goshipit/SKILL.md not found in package. Reinstall: npx goshipit@latest"));
         process.exit(1);
     }
-
     if (isDryRun) console.log(`\n  ${col.warn("[dry-run] no files will be written")}\n`);
 
-    installSharedRefs();
-
+    const latestPromise = fetchLatestVersion();
     const results = [];
-
-    for (const platform of selected) {
-        const wasInstalled = platform.installedAt();
-        const action = wasInstalled ? "updated" : "installed";
+    for (const [dest, platforms] of groupByDest(selected)) {
         try {
-            const dest = platform.install();
-            const ok   = isDryRun || verifyFile(dest);
-            results.push({ platform, status: ok ? "ok" : "verify-fail", dest, action });
+            const action = installSkill(dest);
+            const ok = isDryRun || fileExists(path.join(dest, "SKILL.md"));
+            results.push({ platforms, dest, status: ok ? "ok" : "verify-fail", action });
         } catch (e) {
-            results.push({ platform, status: "err", error: e.message, action });
+            results.push({ platforms, dest, status: "err", error: e.message });
         }
     }
+    const migrated = isProject ? [] : cleanLegacy();
 
-    // Check for newer version (non-blocking, best-effort)
-    const latestPromise = fetchLatestVersion();
+    console.log(`\n  ${col.ok("✅ goshipit v" + VERSION + (isDryRun ? " [dry-run]" : ""))}\n`);
+    for (const r of results) {
+        const label = r.platforms.map(p => p.label).join(", ").padEnd(22);
+        if (r.status === "ok") {
+            console.log(`    ${col.ok("✅")} ${label} ${col.dim(tilde(r.dest))} ${r.action === "updated" ? col.cyan("(updated)") : ""}`);
+        } else if (r.status === "verify-fail") {
+            console.log(`    ${col.warn("⚠")}  ${label} ${col.warn("copied but SKILL.md missing — check permissions")}`);
+        } else {
+            console.log(`    ${col.err("❌")} ${label} ${col.err(r.error)}`);
+        }
+    }
+    if (migrated.length) {
+        console.log(`\n  Removed old v0.1.x pointer files:`);
+        for (const p of migrated) console.log(`    ${col.dim("• " + tilde(p))}`);
+    }
+    printNotes();
 
     const ok = results.filter(r => r.status === "ok");
-    console.log(`\n  ${col.ok("✅ goshipit " + (isDryRun ? "[dry-run]" : "installed!"))}\n`);
-    console.log(`  Shared checks: ${col.dim(sharedRefs)}\n`);
-    console.log(`  Results:`);
-
-    for (const r of results) {
-        const label = r.platform.label.padEnd(18);
-        if (r.status === "ok") {
-            const tag = r.action === "updated"
-                ? col.cyan("(updated v" + VERSION + ")")
-                : col.dim("(v" + VERSION + ")");
-            console.log(`    ${col.ok("✅")} ${label} ${col.dim(r.dest)} ${tag}`);
-        } else if (r.status === "verify-fail") {
-            console.log(`    ${col.warn("⚠")}  ${label} ${col.warn("installed but file verification failed — check permissions")}`);
-        } else {
-            console.log(`    ${col.err("❌")} ${label} ${col.err("ERROR: " + r.error)}`);
-        }
-        // Per-platform notes (e.g. Cline manual step)
-        if (r.status === "ok" && r.platform.note) console.log(r.platform.note);
-    }
-
-    if (ok.length > 0) {
+    if (ok.length) {
         console.log(`\n  Usage:`);
-        for (const r of ok) console.log(`    • ${r.platform.usage}`);
+        for (const r of ok) for (const p of r.platforms) console.log(`    • ${p.usage}`);
+        console.log(`    • First run creates ${col.cyan("goshipit.md")} in your project — tick checks, then say "goshipit"`);
     }
 
-    // Version check result
     const latest = await latestPromise;
-    if (latest && latest !== VERSION) {
-        console.log(`\n  ${col.warn("↑ v" + latest + " available")} — run ${col.cyan("npx goshipit@latest")} to update`);
+    if (latest && isNewer(latest, VERSION)) {
+        console.log(`\n  ${col.warn("↑ v" + latest + " available")} — run ${col.cyan("npx goshipit@latest")}`);
     }
-
-    console.log(`
-  Uninstall: ${col.cyan("npx goshipit --uninstall")}
-  Update:    ${col.cyan("npx goshipit@latest")}
-  Status:    ${col.cyan("npx goshipit --status")}
-`);
+    console.log(`\n  Status: ${col.cyan("npx goshipit --status")}   Uninstall: ${col.cyan("npx goshipit --uninstall")}\n`);
+    if (results.some(r => r.status !== "ok")) process.exitCode = 1;
 }
 
-// ─── run uninstall ────────────────────────────────────────────────────────────
+// ─── run uninstall ───────────────────────────────────────────────────────────
 
 function runUninstall(selected) {
     if (isDryRun) console.log(`\n  ${col.warn("[dry-run] no files will be removed")}\n`);
 
+    // a shared dir (.agents/skills) is kept while any unselected tool still uses it
+    const keep = new Set(PLATFORMS.filter(p => !selected.includes(p)).map(skillDest));
     const results = [];
-
-    for (const platform of selected) {
-        const removed = platform.uninstallPaths.filter(removePath);
-        if (platform.uninstallHook) platform.uninstallHook();
-        results.push({ platform, status: removed.length > 0 ? "ok" : "skip" });
+    for (const [dest, platforms] of groupByDest(selected)) {
+        if (keep.has(dest)) {
+            results.push({ platforms, dest, status: "shared" });
+            continue;
+        }
+        results.push({ platforms, dest, status: uninstallSkill(dest) ? "ok" : "skip" });
     }
+    const migrated = isProject ? [] : cleanLegacy();
 
-    // Remove shared dir only if ALL platforms being uninstalled
-    const allKeys     = new Set(PLATFORMS.map(p => p.key));
-    const selectedKeys = new Set(selected.map(p => p.key));
-    const allSelected = [...allKeys].every(k => selectedKeys.has(k));
-    let sharedRemoved = false;
-    if (allSelected) sharedRemoved = removePath(sharedDir);
-
-    console.log(`\n  ${col.ok("🗑️  goshipit uninstalled!")}\n`);
-
+    console.log(`\n  ${col.ok("🗑️  goshipit " + (isDryRun ? "[dry-run]" : "uninstalled"))}\n`);
     for (const r of results) {
-        const label = r.platform.label.padEnd(18);
-        if (r.status === "ok")   console.log(`    ${col.ok("✅")} ${label} removed`);
-        else                     console.log(`    ${col.dim("⏭️ ")} ${label} ${col.dim("not found (already clean)")}`);
+        const label = r.platforms.map(p => p.label).join(", ").padEnd(22);
+        if (r.status === "ok")          console.log(`    ${col.ok("✅")} ${label} removed ${col.dim(tilde(r.dest))}`);
+        else if (r.status === "shared") console.log(`    ${col.dim("⏭️ ")} ${label} ${col.dim("kept - " + tilde(r.dest) + " is shared with another tool")}`);
+        else                            console.log(`    ${col.dim("⏭️ ")} ${label} ${col.dim("not installed")}`);
     }
-    if (sharedRemoved) console.log(`    ${col.ok("✅")} ${"shared refs".padEnd(18)} ${sharedDir} removed`);
-
+    for (const p of migrated) console.log(`    ${col.ok("✅")} ${"old v0.1.x file".padEnd(22)} ${col.dim(tilde(p))}`);
+    printNotes();
     console.log(`\n  Reinstall anytime: ${col.cyan("npx goshipit")}\n`);
 }
 
 // ─── main ────────────────────────────────────────────────────────────────────
 
 async function main() {
+    if (isInit)    { runInit(); return; }
     if (isHelp)    { showHelp(); return; }
     if (isVersion) { await showVersion(); return; }
     if (isStatus)  { showStatus(); return; }
 
     const selected = await pickPlatforms(isUninstall ? "uninstall" : "install");
-
     if (selected.length === 0) {
         console.log(`\n  ${col.dim("Nothing selected. Exiting.")}\n`);
-        process.exit(0);
+        return;
     }
-
     if (isUninstall) runUninstall(selected);
     else             await runInstall(selected);
 }
 
-main().catch(e => { console.error(col.err(e.message)); process.exit(1); });
+if (require.main === module) {
+    main().catch(e => { console.error(col.err(e.message)); process.exit(1); });
+} else {
+    module.exports = { stripJsonc, removeBlock, stripLegacyGemini, isOurSkillDir, PLATFORMS };
+}

@@ -1,6 +1,6 @@
 {
     "name": "goshipit",
-    "version": "0.1.4",
+    "version": "0.2.0",
     "description": "Pre-launch codebase audit for AI coding tools - 210 checks, stack-agnostic, no live URL needed.",
     "keywords": [
         "claude",
@@ -13,7 +13,10 @@
         "cline",
         "copilot",
         "continue",
+        "opencode",
         "skill",
+        "agentskills",
+        "agent-skills",
         "prelaunch",
         "audit",
         "production",
@@ -31,14 +34,15 @@
         "url": "git+https://github.com/Capta1nRaj/goshipit.git"
     },
     "license": "Apache-2.0",
+    "scripts": {
+        "verify": "node skills/goshipit/scripts/config.js verify"
+    },
     "bin": {
         "goshipit": "bin/install.js"
     },
     "files": [
         "bin/",
-        "goshipit/SKILL.md",
-        "goshipit/references/",
-        "goshipit/adapters/"
+        "skills/goshipit/"
     ],
     "engines": {
         "node": ">=18"

@@ -2,20 +2,29 @@
 
 ## Sync Rule (enforce after every change)
 
-Source of truth: `goshipit/SKILL.md`
+Source of truth: check IDs in `skills/goshipit/references/checks-*.md`; flow + version in `skills/goshipit/SKILL.md`.
 
-After any edit to `goshipit/SKILL.md`, auto-sync these fields without being asked:
+After any edit to `skills/goshipit/SKILL.md`, `skills/goshipit/assets/template.md`, or any `skills/goshipit/references/checks-*.md`, auto-sync these fields without being asked:
 
 | Field | Source | Targets |
 |---|---|---|
-| Check count | Sum `^| [A-Z][0-9]` rows across all `goshipit/references/checks-*.md` files | README.md headline + table intro + package.json `description` + SKILL.md header line |
-| Version | `version:` in SKILL.md frontmatter | `package.json` `version` field |
-| Category list | Categories A–O in SKILL.md | README.md `## What it checks` table (counts + coverage text) |
-| Features | Steps/behavior in SKILL.md | README.md `## Key features` list |
+| Check rows | IDs in `skills/goshipit/references/checks-*.md` (in order) | `skills/goshipit/assets/template.md` rows (`- [x] <ID> · <short title>`, same order, per section) |
+| Check count | Sum of reference rows | `skills/goshipit/assets/template.md` section `(N)` counts + `# goshipit checks (210)` header · README.md headline + table + config snippet · package.json `description` · SKILL.md header line + frontmatter `Runs NNN checks` + Categories table |
+| Version | `metadata.version` in SKILL.md frontmatter | `package.json` `version` field |
+| Category list | Categories A–O | README.md `## What it checks` table (counts + coverage text) · SKILL.md Categories table |
+| Features | Steps/behavior in SKILL.md (Steps 0–8) | README.md `## How it works` + `## Configure with goshipit.md` |
 
-### How to count checks
+Layout follows the Agent Skills spec (agentskills.io): `skills/goshipit/{SKILL.md,scripts/,assets/,references/}`. Frontmatter top-level keys only `name, description, license, compatibility, metadata, allowed-tools` (verify enforces). `bin/install.js` copies the whole folder into each tool's skills dir - no per-tool adapters.
+
+### Verify
 ```bash
-grep -c "^| [A-Z][0-9]" goshipit/references/checks-*.md
+node skills/goshipit/scripts/config.js verify
+```
+Checks template ids == reference ids per section (in order), section counts, `(210)` header, `<total> checks` in SKILL.md / README.md / package.json, and package.json version == SKILL.md version. Exit 1 on any mismatch - fix and re-run until clean.
+
+Fallback (no Node):
+```bash
+grep -c "^| [A-Z][0-9]" skills/goshipit/references/checks-*.md
 ```
 Sum the per-file counts. Checks live in reference files, NOT in SKILL.md.
 
@@ -39,15 +48,13 @@ Sum the per-file counts. Checks live in reference files, NOT in SKILL.md.
 | O | checks-o-agent.md | 22 |
 | **Total** | | **210** |
 
-### Sync checklist (run after every reference file OR SKILL.md edit)
-- [ ] Re-run grep count above; if total changed, update all four targets below
-- [ ] `SKILL.md` header line: `NNN checks` matches total
-- [ ] `SKILL.md` frontmatter description: `Runs NNN checks`
-- [ ] `README.md` headline: `NNN checks` matches total
-- [ ] `README.md` table: per-category counts match per-file grep counts
-- [ ] `README.md` features: reflect current behavior
-- [ ] `package.json` description: check count matches
-- [ ] `package.json` version: matches SKILL.md frontmatter version
+### Sync checklist (run after every reference, template, or SKILL.md edit)
+- [ ] `node skills/goshipit/scripts/config.js verify` passes
+- [ ] `template.md`: new/removed rows mirrored, section `(N)`, `(NNN)` header
+- [ ] `SKILL.md` header line `NNN checks` + frontmatter `Runs NNN checks` + Categories table counts
+- [ ] `README.md` headline, category table counts, config snippet `(NNN)`
+- [ ] `README.md` How it works / Configure sections reflect current behavior
+- [ ] `package.json` description count + version matches SKILL.md
 
 ## Git commits
 Never add `Co-Authored-By: Claude` or any AI co-author line to commit messages.

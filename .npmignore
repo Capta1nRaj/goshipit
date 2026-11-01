@@ -1,17 +1,6 @@
-# Dev/CI
-.github/
-assets/
-references/
-CLAUDE.md
-CONTRIBUTORS.md
-
-# Env & logs
+# package.json "files" whitelist decides what ships; this is a safety net.
 .env
 .env.*
 *.log
-npm-debug.log*
-
-# Misc
 .DS_Store
 node_modules/
-dist/
